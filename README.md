@@ -20,9 +20,13 @@ Die angeforderte `.env.local` ist bereits eingerichtet und von Git ausgeschlosse
 ```dotenv
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_key
+PARTICLE_MESSAGE_PASSWORD=choose-a-password
+PARTICLE_MESSAGE_SESSION_SECRET=generate-a-long-random-value
 ```
 
-Es wird ausschließlich der öffentliche Publishable Key verwendet. Er ist absichtlich im Browser verfügbar. **Keinen Secret Key oder Service Role Key einsetzen.** Es gibt keine Auth-Sitzungen. Nach Änderungen an der Umgebung den Entwicklungsserver neu starten.
+`PARTICLE_MESSAGE_PASSWORD` schützt Startseite und Editor. Nach erfolgreicher serverseitiger Prüfung setzt die App ein signiertes, nur für die Browser-Sitzung gültiges HttpOnly-Cookie. Geteilte Routen unter `/p/[slug]` bleiben direkt und ohne Passwort erreichbar. Für `PARTICLE_MESSAGE_SESSION_SECRET` sollte pro Installation ein langer zufälliger Wert verwendet werden.
+
+Es wird ausschließlich der öffentliche Publishable Key verwendet. Er ist absichtlich im Browser verfügbar. **Keinen Secret Key oder Service Role Key einsetzen.** Es gibt keine Supabase-Auth-Sitzungen. Nach Änderungen an der Umgebung den Entwicklungsserver neu starten.
 
 ## Supabase
 
