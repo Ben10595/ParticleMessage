@@ -1,5 +1,5 @@
 import type { Target } from './targetGenerators';
-const cache = new Map<string, Target[]>();
+import { graphemes } from '../lib/playback';
 let canvas: HTMLCanvasElement | undefined;
 export function wrapText(ctx: Pick<CanvasRenderingContext2D, 'measureText'>, text: string, width: number): string[] {
   const lines: string[] = [];
@@ -9,7 +9,7 @@ export function wrapText(ctx: Pick<CanvasRenderingContext2D, 'measureText'>, tex
       const next = line ? `${line} ${word}` : word;
       if (ctx.measureText(next).width <= width) { line = next; continue; }
       if (line) { lines.push(line); line = ''; }
-      for (const char of Array.from(word)) {
+      for (const char of graphemes(word)) {
         if (line && ctx.measureText(line + char).width > width) { lines.push(line); line = ''; }
         line += char;
       }
@@ -19,37 +19,78 @@ export function wrapText(ctx: Pick<CanvasRenderingContext2D, 'measureText'>, tex
   return lines;
 }
 export interface TextOptions { x: number; y: number; width: number; height: number; fontSize: number; align?: 'left' | 'center'; weight?: number; spacing?: number; fit?: boolean; opacity?: number; verticalAlign?: 'top' | 'center' }
-export function createTextTargets(text: string, options: TextOptions): Target[] {
-  const { x, y, width, height, align = 'center', weight = 500, fit = false, opacity = .92 } = options;
-  if (!text || width < 1 || height < 1) return [];
-  canvas ??= document.createElement('canvas');
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) throw new Error('Canvas ist in diesem Browser nicht verfügbar.');
-  let fontSize = options.fontSize;
-  let lines: string[];
-  do {
-    ctx.font = `${weight} ${fontSize}px Arial, sans-serif`;
-    lines = wrapText(ctx, text, width - 4);
-    if (!fit || lines.length * fontSize * 1.3 <= height || fontSize <= 16) break;
-    fontSize -= 2;
-  } while (true);
-  const spacing = options.spacing ?? (fontSize >= 50 ? 3.6 : fontSize >= 20 ? 2.3 : 1.65);
-  const key = JSON.stringify([text, Math.round(width), Math.round(height), fontSize, align, weight, spacing, fit, options.verticalAlign]);
-  let points = cache.get(key);
-  if (!points) {
+export interface Glyph { text: string; index: number; x: number; y: number; width: number; emoji: boolean }
+export interface TextLayout { targets: Target[]; glyphs: Glyph[]; cursors: { x: number; y: number }[]; fontSize: number; count: number }
+const cache = new Map<string, TextLayout>();
+const emojiPattern = /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20e3/u;
+export function createTextLayout(text: string, options: TextOptions): TextLayout {
+  const { x, y, width, height, align = 'center', weight = 600, fit = false, opacity = 1 } = options;
+  if (!text || width < 1 || height < 1) return { targets: [], glyphs: [], cursors: [], fontSize: options.fontSize, count: 0 };
+  const key = JSON.stringify([text, Math.round(width), Math.round(height), options.fontSize, align, weight, options.spacing, fit, options.verticalAlign]);
+  let layout = cache.get(key);
+  if (!layout) {
+    canvas ??= document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) throw new Error('Canvas ist in diesem Browser nicht verfügbar.');
+    const characters = graphemes(text);
+    let fontSize = options.fontSize;
+    let lines: { text: string; index: number }[][] = [];
+    do {
+      ctx.font = `${weight} ${fontSize}px Arial, sans-serif`;
+      lines = [[]];
+      let lineWidth = 0;
+      for (let index = 0; index < characters.length; index++) {
+        const char = characters[index];
+        if (char === '\n') { lines[lines.length - 1].push({ text: char, index }); lines.push([]); lineWidth = 0; continue; }
+        const charWidth = ctx.measureText(char).width;
+        // Wrap whole words when possible, then split long unbroken strings by grapheme.
+        if (char !== ' ' && (index === 0 || /[\s]/u.test(characters[index - 1]))) {
+          let word = char;
+          for (let j = index + 1; j < characters.length && !/\s/u.test(characters[j]); j++) word += characters[j];
+          if (lineWidth > 0 && lineWidth + ctx.measureText(word).width > width - 8) { lines.push([]); lineWidth = 0; }
+        }
+        if (lineWidth + charWidth > width - 8 && lineWidth > 0) { lines.push([]); lineWidth = 0; }
+        lines[lines.length - 1].push({ text: char, index }); lineWidth += charWidth;
+      }
+      if (!fit || lines.length * fontSize * 1.35 <= height || fontSize <= 14) break;
+      fontSize -= 1;
+    } while (true);
+    const spacing = options.spacing ?? Math.max(1.45, Math.min(3.1, fontSize / 28));
     canvas.width = Math.ceil(width); canvas.height = Math.ceil(height);
     ctx.font = `${weight} ${fontSize}px Arial, sans-serif`;
-    ctx.fillStyle = '#fff'; ctx.textAlign = align; ctx.textBaseline = 'middle';
-    const lineHeight = fontSize * 1.3;
-    const top = options.verticalAlign === 'top' ? lineHeight / 2 : Math.max(lineHeight / 2, (height - lines.length * lineHeight) / 2 + lineHeight / 2);
-    lines.forEach((line, i) => ctx.fillText(line, align === 'center' ? width / 2 : 2, top + i * lineHeight));
+    ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle';
+    const lineHeight = fontSize * 1.35;
+    const top = options.verticalAlign === 'top' ? lineHeight / 2 : (height - lines.length * lineHeight) / 2 + lineHeight / 2;
+    const glyphs: Glyph[] = [];
+    const cursors: TextLayout['cursors'] = [];
+    lines.forEach((line, row) => {
+      const lineWidth = line.reduce((sum, char) => sum + (char.text === '\n' ? 0 : ctx.measureText(char.text).width), 0);
+      let left = align === 'center' ? (width - lineWidth) / 2 : 4;
+      line.forEach(char => {
+        const glyphWidth = char.text === '\n' ? 0 : ctx.measureText(char.text).width;
+        const glyph = { ...char, x: left, y: top + row * lineHeight, width: glyphWidth, emoji: emojiPattern.test(char.text) };
+        cursors[char.index] = { x: left, y: glyph.y };
+        glyphs.push(glyph);
+        if (!glyph.emoji && char.text !== '\n') ctx.fillText(char.text, left, glyph.y);
+        left += glyphWidth;
+        cursors[char.index + 1] = { x: left + 2, y: glyph.y };
+      });
+    });
     const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    points = [];
-    for (let py = 0; py < canvas.height; py += spacing) for (let px = 0; px < canvas.width; px += spacing) {
-      if (pixels[(Math.floor(py) * canvas.width + Math.floor(px)) * 4 + 3] > 95) points.push({ x: px, y: py, size: spacing > 3 ? 1.1 : .9, delay: (py / Math.max(height, 1)) * 140 + px / width * 550 });
+    const targets: Target[] = [];
+    for (const glyph of glyphs) {
+      if (glyph.emoji || /\s/u.test(glyph.text)) continue;
+      for (let py = Math.max(0, Math.floor(glyph.y - fontSize * .65)), row = 0; py < Math.min(height, glyph.y + fontSize * .65); py += spacing, row++) {
+        for (let px = Math.max(0, glyph.x), col = 0; px < Math.min(width, glyph.x + glyph.width); px += spacing, col++) {
+          const alpha = pixels[(Math.floor(py) * canvas.width + Math.floor(px)) * 4 + 3] / 255;
+          if (alpha > .35) targets.push({ x: px, y: py, size: spacing * .39, opacity: Math.min(1, .75 + alpha * .25), key: `glyph-${glyph.index}-${row}-${col}`, glyph: glyph.index, delay: 0 });
+        }
+      }
     }
-    if (cache.size >= 45) cache.delete(cache.keys().next().value!);
-    cache.set(key, points);
+    layout = { targets, glyphs, cursors, fontSize, count: characters.length };
+    if (cache.size >= 24) cache.delete(cache.keys().next().value!);
+    cache.set(key, layout);
   }
-  return points.map(point => ({ ...point, x: point.x + x, y: point.y + y, opacity }));
+  return { ...layout, targets: layout.targets.map(p => ({ ...p, x: p.x + x, y: p.y + y, opacity: (p.opacity ?? 1) * opacity })), glyphs: layout.glyphs.map(g => ({ ...g, x: g.x + x, y: g.y + y })), cursors: layout.cursors.map(c => ({ x: c.x + x, y: c.y + y })) };
 }
+export function createTextTargets(text: string, options: TextOptions): Target[] { return createTextLayout(text, options).targets; }

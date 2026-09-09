@@ -1,4 +1,4 @@
-export interface Target { key?: string; x: number; y: number; opacity?: number; size?: number; delay?: number }
+export interface Target { key?: string; glyph?: number; x: number; y: number; opacity?: number; size?: number; delay?: number }
 export function createLineTargets(x1: number, y1: number, x2: number, y2: number, spacing = 7): Target[] {
   const count = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / spacing));
   return Array.from({ length: count + 1 }, (_, i) => ({ x: x1 + (x2 - x1) * i / count, y: y1 + (y2 - y1) * i / count, opacity: .48, size: .85 }));

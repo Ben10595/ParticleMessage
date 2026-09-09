@@ -30,7 +30,7 @@ Es wird ausschließlich der öffentliche Publishable Key verwendet. Er ist absic
 
 ## Supabase
 
-Die vorhandene Tabelle `public.messages` wird unverändert verwendet:
+Die vorhandene Tabelle `public.messages` wird weiterverwendet:
 
 | Spalte | PostgreSQL-Typ | Vorgabe |
 | --- | --- | --- |
@@ -39,7 +39,7 @@ Die vorhandene Tabelle `public.messages` wird unverändert verwendet:
 | content | jsonb | Nachrichtenformat unten |
 | slug | text | Unique |
 
-RLS muss aktiviert bleiben. Die vorhandenen Policies müssen der Rolle `anon` SELECT und INSERT erlauben; auch die entsprechenden Tabellenrechte und bei sequenzbasierten IDs gegebenenfalls Sequenzrechte müssen vorliegen. Die App benötigt weder UPDATE noch DELETE und führt keine Migrationen aus.
+RLS muss aktiviert bleiben. Die vorhandenen Policies müssen der Rolle `anon` SELECT und INSERT erlauben; auch die entsprechenden Tabellenrechte und bei sequenzbasierten IDs gegebenenfalls Sequenzrechte müssen vorliegen. Der Browser benötigt weder UPDATE noch DELETE. Die Ablauf-Migration unten ergänzt ausschließlich Zugriffsschutz, Zeitstempel-Trigger, Index und Bereinigungsjob.
 
 ```json
 {
@@ -51,22 +51,25 @@ RLS muss aktiviert bleiben. Die vorhandenen Policies müssen der Rolle `anon` SE
 }
 ```
 
-`Link erstellen` validiert die Daten, erzeugt mit `crypto.getRandomValues` einen zwölfstelligen URL-sicheren Slug (72 Bit Zufall) und speichert `{ content, slug }`. Bei PostgreSQL-Fehler `23505` werden maximal fünf Slugs versucht. Die Route `/p/[slug]` fragt ausschließlich `content` für den exakt passenden Slug ab. Daten aus der Datenbank werden erneut validiert. Abfragen haben ein 15-Sekunden-Zeitlimit.
+`Link erstellen` validiert die Daten, erzeugt mit `crypto.getRandomValues` einen zwölfstelligen URL-sicheren Slug (72 Bit Zufall) und speichert `{ content, slug }`. Bei PostgreSQL-Fehler `23505` werden maximal fünf Slugs versucht. Die Route `/p/[slug]` fragt `content` und `created_at` für den exakt passenden Slug ab. Daten aus der Datenbank werden erneut validiert. Abfragen haben ein 15-Sekunden-Zeitlimit.
 
-Die vorhandenen öffentlichen SELECT/INSERT-Policies sind **keine Zugriffskontrolle anhand des Links**: Nachrichten sind öffentlich lesbar und werden nicht verschlüsselt. Zufallsslugs erschweren das Erraten einzelner URLs. Da keine Konten oder Löschrechte vorgesehen sind, bleibt ein gespeicherter Link bestehen; erneutes Speichern erzeugt einen neuen Link. Entwürfe bleiben während der geöffneten Sitzung im Speicher und werden erst beim Erstellen des Links gespeichert. Missbrauchsschutz und verbindliche serverseitige Größenlimits sollten für einen öffentlichen Betrieb zusätzlich in Supabase eingerichtet werden; Clientvalidierung allein kann direkte API-Aufrufe nicht begrenzen.
+Die vorhandenen öffentlichen SELECT/INSERT-Policies sind **keine Zugriffskontrolle anhand des Links**: Nachrichten sind öffentlich lesbar und werden nicht verschlüsselt. Zufallsslugs erschweren das Erraten einzelner URLs. Ein Link läuft nach 72 Stunden ab; erneutes Speichern erzeugt einen neuen Link. Entwürfe bleiben während der geöffneten Sitzung im Speicher und werden erst beim Erstellen des Links gespeichert. Missbrauchsschutz und verbindliche serverseitige Größenlimits sollten für einen öffentlichen Betrieb zusätzlich in Supabase eingerichtet werden; Clientvalidierung allein kann direkte API-Aufrufe nicht begrenzen.
+
+## Ablauf nach 3 Tagen
+
+`supabase/migrations/202609090001_message_expiry.sql` einmal im SQL Editor des bestehenden Supabase-Projekts als `postgres` ausführen. **Im Rahmen der lokalen Überarbeitung noch nicht auf der entfernten Datenbank angewendet.** Die Migration sperrt abgelaufene Nachrichten per restriktiver RLS-Policy, schützt `created_at` gegen Manipulation und entfernt Nachrichten nach 72 Stunden im 15-Minuten-Takt mit Supabase Cron. Das betrifft auch bereits gespeicherte, abgelaufene Nachrichten. Es werden keine Inhalte oder Slugs in einer separaten Ablauftabelle behalten.
+
+Keine neuen Environment Variables, Service-Role-Keys, Vercel-Cron-Endpunkte oder kostenpflichtigen Zusatzdienste. Die App prüft `created_at` außerdem beim Laden und stoppt auch eine bereits geöffnete Wiedergabe am Ablaufzeitpunkt. Nicht mehr vorhandene Links erhalten dieselbe Ablaufseite.
+
+Grundlage: [Supabase Cron](https://supabase.com/docs/guides/cron/quickstart) und [restriktive RLS-Policies](https://supabase.com/docs/guides/database/postgres/row-level-security).
 
 ## Partikelsystem
 
-- `particles/ParticleEngine.ts`: ein langlebiger Pool pro geöffnetem Erlebnis, Zustände FLOATING / FORMING / HOLDING / DISPERSING, individuelle Federphysik, gedämpfte Pointer-Reaktion und framebasierter Zeitgeber.
-- `particles/textSampler.ts`: unsichtbares Canvas, Alpha-Sampling, Umbruch einschließlich langer Wörter und Unicode, begrenzter Cache für Zielpunkte.
-- `particles/targetGenerators.ts`: wiederverwendbare Punkte für Linien, Rahmen und Buttons.
-- `components/ParticleCanvas.tsx`: Canvas-Lebenszyklus und Fallback bei fehlendem Kontext.
-- `components/ParticleEditor.tsx`: transparente semantische HTML-Steuerelemente. Ihre sichtbaren Texte und Rahmen entstehen auf dem Canvas.
-- `components/ParticleExperience.tsx`: Wechsel zwischen Start, Editor, Vorschau, Link-Erfolg und Zuschaueransicht ohne Austausch des Canvas.
-- `components/ParticleViewer.tsx`: Screenreader-Ausgabe und Vorschau-Abbruch.
-- `lib/messages.ts`, `lib/supabase.ts`: zentrale Speicherung, Slugs, Validierung und Fehlerbehandlung.
+Der bestehende Canvas-Pool und seine Zustände bleiben erhalten. Ein dichtes Textraster mit präzisen Ruhepositionen ersetzt das flimmernde Schriftbild. Nur große Titel und Nachrichtentexte bestehen aus Partikeln; Controls sind normales HTML. Emojis werden als vollständige Unicode-Grapheme nativ gezeichnet. Die Textziele und Umbrüche werden pro Inhalt/Layout berechnet und zwischengespeichert, Schreibanimationen laufen ohne React-Updates pro Zeichen.
 
-Zielpunkte werden nur bei Änderungen an Inhalt oder Layout berechnet, niemals pro Frame. Der Pool passt sich an Bildschirmgröße und gemessene Framezeiten an (Grundbudget Desktop 2.200–3.500, mobil 1.800 Punkte; dichte Editoransichten erweitern denselben Pool bei Bedarf auf maximal 6.000 bzw. 4.200 Punkte, damit Beschriftungen lesbar bleiben; bei niedriger Leistung 20 % weniger). Ein Teil bleibt frei schwebend. DPR wird bis 2 berücksichtigt. Resize und Scroll aktualisieren Zielpositionen. Animationen und Haltezeiten pausieren in unsichtbaren Tabs. `prefers-reduced-motion` hält freie Punkte ruhig und setzt Formen ohne Flugbewegung zusammen. Screenreader erhalten semantische Texte; bei fehlendem Canvas bleibt ein normales, vollständig bedienbares Formular verfügbar. Eingaben werden niemals als HTML interpretiert.
+Der Editor bündelt Textänderungen für 380 ms und löst die Vorschau vor dem erneuten Formen weich auf. Bestehende Partikel werden über stabile Schlüssel und räumliche Zuordnung wiederverwendet. Neun Übergänge, vier Schreibpresets, eigene Pausenwerte, Haltezeiten und ein optionales Finale werden als optionale `settings` bzw. `slides[].effect` im weiterhin kompatiblen Version-1-Format gespeichert. Alte Nachrichten verwenden Smooth Morph ohne Schreibanimation.
+
+Textpartikel haben Vorrang vor Hintergrundpartikeln. Bei schlechter Bildrate reduziert die Engine den Hintergrund und entfernt überzählige freie Partikel; ruhende Textpunkte werden gemeinsam gezeichnet. DPR ist auf 2 begrenzt, unsichtbare Tabs pausieren die Animationszeit. `prefers-reduced-motion` überspringt Flug- und Schreibbewegungen. Ohne Canvas bleiben Editor und Nachrichten als HTML nutzbar.
 
 ## Prüfungen
 
@@ -75,10 +78,11 @@ npm run typecheck
 npm run lint
 npm test
 npm run build
+npm run test:browser
 npm start
 ```
 
-Die automatisierten Tests prüfen Nachrichtenlimits und Format, Unicode, unveränderte Behandlung von HTML-Text, Sluggenerierung, begrenzte Kollisionswiederholungen, nicht wiederholbare Insertfehler sowie responsive Textumbrüche. Funktionstests im Browser und der echte Supabase-Rundlauf sind in `TESTING.md` dokumentiert.
+Unit-Tests prüfen Format, Unicode, Slugs, Authentifizierung, Pausen, Ablaufgrenzen und Partikelbewegungen. Die Browser-Tests verwenden Chrome, starten den Production-Build mit ausschließlich lokalen Test-Zugangsdaten und simulieren Supabase-Antworten. Vorher einen eventuell laufenden Server auf Port 3000 beenden. Der echte Supabase-Rundlauf und die entfernte SQL-Migration sind separat zu verifizieren.
 
 ## Deployment auf Vercel
 
