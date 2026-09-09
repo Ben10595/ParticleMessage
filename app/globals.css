@@ -1043,3 +1043,179 @@ select {
     scroll-behavior:auto!important;
   }
 }
+
+/* A single canvas is the visible structure; HTML supplies layout and hit areas. */
+.canvas-ready [data-particle="text"],
+.canvas-ready [data-particle="button"] {
+  color:transparent;
+  text-shadow:none;
+}
+.canvas-ready [data-particle="text"] *,
+.canvas-ready [data-particle="button"] * {
+  color:transparent;
+}
+.canvas-ready [data-particle="frame"],
+.canvas-ready [data-particle="control"],
+.canvas-ready [data-particle="button"] {
+  background:transparent;
+  border-color:transparent;
+  border-radius:0;
+  box-shadow:none;
+}
+.canvas-ready [data-particle="button"]:hover,
+.canvas-ready [data-particle="button"]:active {
+  background:transparent;
+  box-shadow:none;
+  transform:none;
+}
+.canvas-ready .editor-panel,
+.canvas-ready .live-preview,
+.canvas-ready .text-toolbar,
+.canvas-ready .settings-group,
+.canvas-ready .advanced {
+  background:transparent;
+  border-color:transparent;
+  box-shadow:none;
+  border-radius:0;
+}
+.canvas-ready .text-field:focus-within,
+.canvas-ready .password-field:focus-within {
+  border-color:transparent;
+}
+.canvas-ready .wordmark:before,
+.canvas-ready .preview-meta i {
+  display:none;
+}
+.canvas-ready .switch,
+.canvas-ready .switch:before {
+  background:transparent;
+  border:0;
+  box-shadow:none;
+}
+.canvas-ready input[type="range"] {
+  appearance:none;
+  background:transparent;
+  color:transparent;
+}
+.canvas-ready input[type="range"]::-webkit-slider-runnable-track {
+  background:transparent;
+}
+.canvas-ready input[type="range"]::-webkit-slider-thumb {
+  appearance:none;
+  width:20px;
+  height:20px;
+  background:transparent;
+}
+.canvas-ready input[type="range"]::-moz-range-track,
+.canvas-ready input[type="range"]::-moz-range-thumb {
+  background:transparent;
+  border:0;
+}
+.canvas-ready select {
+  appearance:none;
+  background:transparent;
+  border-radius:0;
+}
+select option {
+  background:#080d13;
+  color:#edf5f9;
+}
+.canvas-ready .emoji-picker {
+  background:#06080bf5;
+}
+.particle-divider {
+  height:1px;
+  width:100%;
+  margin-bottom:7px;
+}
+.wordmark {
+  min-width:200px;
+  min-height:24px;
+  font-size:16px;
+}
+.branding {
+  width:240px;
+  margin:auto;
+  min-height:24px;
+  font-size:13px!important;
+  text-align:center;
+}
+.branding .brand-heart {
+  animation:none;
+}
+.editor h1 {
+  min-height:60px;
+  min-width:390px;
+  line-height:1.5;
+}
+.editor-panel {
+  padding:28px;
+}
+.editor-grid {
+  gap:44px;
+}
+.live-preview {
+  min-height:500px;
+}
+.preview-bounds {
+  height:355px;
+}
+button.primary {
+  min-width:180px;
+}
+.editor-bottom button.primary {
+  min-width:0;
+}
+.eyebrow {
+  color:#afc4ce;
+}
+.canvas-ready .primary,
+.canvas-ready .secondary,
+.canvas-ready .slide-tabs button,
+.canvas-ready .slide-actions button,
+.canvas-ready .preview-close {
+  color:transparent;
+}
+.canvas-ready .total {
+  border:0;
+  border-radius:0;
+}
+.editor-heading .total {
+  color:#9db0bb;
+}
+.canvas-ready .back {
+  min-width:105px;
+}
+.canvas-ready .intro {
+  font-size:20px;
+  line-height:1.8;
+  max-width:470px;
+  min-height:76px;
+}
+@media(max-width:700px) {
+  .wordmark { min-width:190px; font-size:14px; }
+  .editor h1 { min-width:0; min-height:90px; }
+  .editor-grid { gap:24px; }
+  .editor-panel { padding:18px; }
+  .live-preview { min-height:240px; }
+  .preview-bounds { height:160px; }
+  .canvas-ready .intro { font-size:18px; max-width:320px; }
+}
+.canvas-ready [data-particle-native="true"],
+.canvas-ready [data-particle-native="true"] * {
+  color:var(--foreground);
+}
+.canvas-ready .branding[data-particle-native="true"],
+.canvas-ready .branding[data-particle-native="true"] * {
+  color:#9aafb9;
+}
+.editor-heading>div {
+  flex:1;
+}
+.editor h1 {
+  width:100%;
+  max-width:850px;
+}
+@media(max-width:700px) {
+  .editor h1 { min-height:100px; }
+}

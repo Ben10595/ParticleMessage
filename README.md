@@ -65,7 +65,7 @@ Grundlage: [Supabase Cron](https://supabase.com/docs/guides/cron/quickstart) und
 
 ## Partikelsystem
 
-Der bestehende Canvas-Pool und seine Zustände bleiben erhalten. Ein dichtes Textraster mit präzisen Ruhepositionen ersetzt das flimmernde Schriftbild. Nur große Titel und Nachrichtentexte bestehen aus Partikeln; Controls sind normales HTML. Emojis werden als vollständige Unicode-Grapheme nativ gezeichnet. Die Textziele und Umbrüche werden pro Inhalt/Layout berechnet und zwischengespeichert, Schreibanimationen laufen ohne React-Updates pro Zeichen.
+Der bestehende Canvas-Pool und seine Zustände bleiben erhalten. Ein dichtes Textraster mit präzisen Ruhepositionen ersetzt das flimmernde Schriftbild. Titel, Texte ab 18 px, Rahmen, Buttons, Eingabekanten, Vorschauflächen, Schalter und Slider entstehen aus demselben Partikelpool. Transparente HTML-Controls bleiben als barrierefreie Bedienfläche erhalten; kleine Beschriftungen und Eingabetexte bleiben nativ lesbar. Emojis werden als vollständige Unicode-Grapheme nativ gezeichnet. Die Textziele und Umbrüche werden pro Inhalt/Layout berechnet und zwischengespeichert, Schreibanimationen laufen ohne React-Updates pro Zeichen.
 
 Der Editor bündelt Textänderungen für 380 ms und löst die Vorschau vor dem erneuten Formen weich auf. Bestehende Partikel werden über stabile Schlüssel und räumliche Zuordnung wiederverwendet. Neun Übergänge, vier Schreibpresets, eigene Pausenwerte, Haltezeiten und ein optionales Finale werden als optionale `settings` bzw. `slides[].effect` im weiterhin kompatiblen Version-1-Format gespeichert. Alte Nachrichten verwenden Smooth Morph ohne Schreibanimation.
 

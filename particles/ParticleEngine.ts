@@ -1,7 +1,8 @@
-import { createTextLayout, type TextLayout, type TextOptions } from './textSampler';
+import { createTextLayout, type TextLayout } from './textSampler';
 import type { Target } from './targetGenerators';
 import { EFFECTS, type TransitionEffect, type WritingSettings } from '../types/message';
 import { typingTimeline } from '../lib/playback';
+import { sampleUI } from './uiSampler';
 export type ParticleState = 'FLOATING' | 'FORMING' | 'HOLDING' | 'DISPERSING';
 export interface Particle {
   x: number; y: number; targetX: number; targetY: number; velocityX: number; velocityY: number;
@@ -23,6 +24,12 @@ export class ParticleEngine {
   private slowFrames = 0; private frameCount = 0; private performanceScale = 1;
   private presentation: Presentation | null = null;
   private uiLayouts: TextLayout[] = [];
+  private uiRoot: HTMLElement | null = null;
+  private uiTargets: Target[] = [];
+  private textTargets: Target[] = [];
+  private exclusions: DOMRect[] = [];
+  private textBounds: { x: number; y: number; right: number; bottom: number } | null = null;
+  private refreshFrame = 0;
   private waiters = new Set<{ end: number; finish: () => void; abort: () => void }>();
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d', { alpha: false });
@@ -48,7 +55,7 @@ export class ParticleEngine {
       state: 'FLOATING', activation: 0, release: 0, targetOpacity: 1, targetSize: 1,
       fromX: x, fromY: y, controlX: x, controlY: y, duration: 1000 };
   }
-  private desiredCount() { return Math.round(Math.min(this.width < 700 ? 140 : 300, this.width * this.height / 4500) * this.performanceScale); }
+  private desiredCount() { return Math.round(Math.min(this.width < 700 ? 650 : 1500, Math.max(450, this.width * this.height / 750)) * this.performanceScale); }
   private resize = () => {
     this.width = window.innerWidth; this.height = window.innerHeight;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -57,7 +64,25 @@ export class ParticleEngine {
     while (this.particles.length < this.desiredCount()) this.particles.push(this.makeParticle());
     this.refresh();
   };
-  refresh = () => { if (!this.disposed) this.scene?.(); };
+  refresh = () => {
+    if (this.disposed || this.refreshFrame) return;
+    this.refreshFrame = requestAnimationFrame(() => {
+      this.refreshFrame = 0;
+      if (this.uiRoot?.isConnected) this.captureUI();
+      if (this.scene) this.scene();
+      else this.setParticleTargets(this.uiTargets, false);
+    });
+  };
+  private captureUI() {
+    if (!this.uiRoot) return;
+    const sample = sampleUI(this.uiRoot, this.height);
+    this.uiTargets = sample.targets; this.uiLayouts = sample.layouts; this.exclusions = sample.exclusions;
+  }
+  private mergeTargets(animate = true, effect: TransitionEffect = 'morph', duration = 1150) {
+    this.canvas.dataset.uiTargetCount = String(this.uiTargets.length);
+    this.canvas.dataset.textTargetCount = String(this.textTargets.length);
+    this.setParticleTargets([...this.uiTargets, ...this.textTargets], animate, effect, duration);
+  }
   setParticleTargets(targets: Target[], animate = true, effect: TransitionEffect = 'morph', duration = 1150) {
     if (effect === 'random') effect = EFFECTS[Math.floor(Math.random() * (EFFECTS.length - 1))];
     while (this.particles.length < targets.length + this.desiredCount()) this.particles.push(this.makeParticle());
@@ -85,9 +110,9 @@ export class ParticleEngine {
         p ??= available.values().next().value!;
         available.delete(p); next.set(key, p);
       }
-      const unchanged = p.targetX === target.x && p.targetY === target.y && p.state === 'HOLDING';
+      const unchanged = p.targetX === target.x && p.targetY === target.y && (p.state === 'HOLDING' || p.state === 'FORMING');
       p.targetX = target.x; p.targetY = target.y; p.targetOpacity = target.opacity ?? 1; p.targetSize = target.size ?? 1;
-      if (unchanged && !animate) return;
+      if (unchanged) return;
       p.fromX = p.x; p.fromY = p.y;
       const dx = target.x - p.x, dy = target.y - p.y;
       const bend = Math.sin(p.phase) * Math.min(25, Math.hypot(dx, dy) * .09);
@@ -111,15 +136,20 @@ export class ParticleEngine {
     this.canvas.dataset.phase = this.reducedMotion ? 'holding' : 'forming';
   }
   private releaseParticle(p: Particle, strength = 1) {
-    p.state = 'DISPERSING'; p.release = this.time + 900;
+    p.state = 'DISPERSING'; p.release = this.time + 1400;
+    p.homeX = Math.random() * this.width; p.homeY = Math.random() * this.height;
     p.velocityX = Math.cos(p.phase) * (1.5 + p.speed) * strength;
     p.velocityY = Math.sin(p.phase) * (1.5 + p.speed) * strength;
     if (this.reducedMotion) { p.state = 'FLOATING'; p.opacity = 0; }
   }
   disperseParticles(strength = 1) {
-    this.scene = null; this.presentation = null; this.uiLayouts = []; this.assignments.clear();
+    this.scene = null; this.presentation = null; this.textBounds = null; this.uiLayouts = []; this.uiTargets = []; this.textTargets = []; this.uiRoot = null; this.assignments.clear();
     this.canvas.dataset.phase = 'dispersing';
     this.particles.forEach(p => { if (p.state !== 'FLOATING') this.releaseParticle(p, strength); });
+  }
+  disperseText(strength = .8) {
+    this.scene = null; this.presentation = null; this.textBounds = null; this.textTargets = [];
+    for (const [key, p] of this.assignments) if (!key.startsWith('ui-')) { this.releaseParticle(p, strength); this.assignments.delete(key); }
   }
   formText(text: string, options: FormOptions | boolean = {}): number {
     const opts = typeof options === 'boolean' ? {} : options;
@@ -131,12 +161,14 @@ export class ParticleEngine {
       const rect = opts.bounds?.();
       const width = rect?.width ?? this.width * .84, height = rect?.height ?? this.height * .64;
       const layout = createTextLayout(text, { x: rect?.x ?? this.width * .08, y: rect?.y ?? this.height * .18, width, height, fontSize: Math.min(rect ? 64 : 104, width / (rect ? 8 : 9)), fit: true, weight: 600 });
-      this.uiLayouts = [];
+      this.textBounds = layout.glyphs.length ? { x: Math.min(...layout.glyphs.map(g => g.x)) - 12, right: Math.max(...layout.glyphs.map(g => g.x + g.width)) + 12, y: Math.min(...layout.glyphs.map(g => g.y)) - layout.fontSize, bottom: Math.max(...layout.glyphs.map(g => g.y)) + layout.fontSize } : null;
       this.presentation = { layout, timeline, start, typing: timeline.length > 0, cursorUntil: start + completion + 1100 };
       const elapsed = this.time - start;
-      this.setParticleTargets(layout.targets.map(p => ({ ...p, delay: Math.max(0, (timeline[p.glyph ?? 0] ?? 0) - elapsed) })), !refresh, opts.effect, duration);
+      this.textTargets = layout.targets.map(p => ({ ...p, delay: Math.max(0, (timeline[p.glyph ?? 0] ?? 0) - elapsed) }));
+      this.mergeTargets(!refresh, opts.effect, duration);
       // Resize preserves the writing timeline and never reveals future letters early.
       if (refresh && timeline.length && !this.reducedMotion) for (const [key, p] of this.assignments) {
+        if (key.startsWith('ui-')) continue;
         const glyph = Number(key.split('-')[1]);
         if ((timeline[glyph] ?? 0) > elapsed) { p.state = 'FORMING'; p.activation = start + timeline[glyph]; p.opacity = 0; }
       }
@@ -145,20 +177,7 @@ export class ParticleEngine {
     return completion;
   }
   formUI(root: HTMLElement, animate = true) {
-    const form = (refresh = false) => {
-      this.presentation = null; this.uiLayouts = [];
-      const targets: Target[] = [];
-      root.querySelectorAll<HTMLElement>('[data-particle="hero"]').forEach((element, index) => {
-        const rect = element.getBoundingClientRect(), style = getComputedStyle(element);
-        if (!rect.width || !rect.height) return;
-        const options: TextOptions = { x: rect.x, y: rect.y, width: rect.width, height: rect.height, fontSize: parseFloat(style.fontSize), weight: 600, fit: true };
-        const layout = createTextLayout(element.textContent ?? '', options);
-        this.uiLayouts.push(layout);
-        targets.push(...layout.targets.map(p => ({ ...p, key: `ui-${index}-${p.key}` })));
-      });
-      this.setParticleTargets(targets, animate && !refresh);
-    };
-    this.scene = () => form(true); form();
+    this.uiRoot = root; this.captureUI(); this.mergeTargets(animate);
   }
   wait(ms: number, signal?: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -218,8 +237,8 @@ export class ParticleEngine {
         if (p.state === 'FLOATING' && floating++ >= ambient) { p.opacity = 0; continue; }
         if (!this.reducedMotion) {
           if (p.state === 'FLOATING') {
-            const driftX = p.homeX + Math.sin(this.time * .00015 + p.phase) * 25;
-            const driftY = p.homeY + Math.cos(this.time * .00012 + p.phase) * 20;
+            const driftX = p.homeX + Math.sin(this.time * .00012 * p.speed + p.phase) * 115;
+            const driftY = p.homeY + Math.cos(this.time * .00010 * p.speed + p.phase) * 90;
             p.velocityX += (driftX - p.x) * .0015 * dt; p.velocityY += (driftY - p.y) * .0015 * dt;
             const dx = p.x - this.pointer.x, dy = p.y - this.pointer.y, dist = Math.hypot(dx, dy);
             if (dist < 95 && dist > 1) { const force = (1 - dist / 95) * .28; p.velocityX += dx / dist * force; p.velocityY += dy / dist * force; }
@@ -227,20 +246,25 @@ export class ParticleEngine {
           p.velocityX *= Math.pow(.96, dt); p.velocityY *= Math.pow(.96, dt);
           p.x += p.velocityX * dt; p.y += p.velocityY * dt;
         }
-        if (p.state === 'DISPERSING') { dispersing++; p.opacity *= Math.pow(.96, dt); if (this.time >= p.release) { p.state = 'FLOATING'; p.homeX = p.x; p.homeY = p.y; } }
+        if (p.state === 'DISPERSING') { dispersing++; p.opacity *= Math.pow(.96, dt); if (this.time >= p.release) { p.state = 'FLOATING'; } }
         else {
           // Keep the central reading area free from distracting ambient points.
-          const inText = this.presentation && p.x > this.width * .06 && p.x < this.width * .94 && p.y > this.height * .15 && p.y < this.height * .85;
-          p.opacity += ((inText ? .012 : .10) - p.opacity) * .06 * dt;
+          const inText = this.textBounds && p.x > this.textBounds.x && p.x < this.textBounds.right && p.y > this.textBounds.y && p.y < this.textBounds.bottom;
+          const behindUI = this.exclusions.some(rect => p.x > rect.x - 8 && p.x < rect.right + 8 && p.y > rect.y - 7 && p.y < rect.bottom + 7);
+          p.opacity += ((inText || behindUI ? .012 : .13 + p.speed * .18) - p.opacity) * .06 * dt;
         }
       }
       if (p.opacity < .008) continue;
       ctx.globalAlpha = p.opacity; ctx.beginPath(); ctx.arc(p.x, p.y, p.state === 'FORMING' ? p.targetSize : p.size, 0, Math.PI * 2); ctx.fill();
     }
-    // Settled letters never jitter and share one draw call.
-    ctx.globalAlpha = 1; ctx.beginPath();
-    for (const p of this.assignments.values()) if (p.state === 'HOLDING') { ctx.moveTo?.(p.x + p.targetSize, p.y); ctx.arc(p.x, p.y, p.targetSize, 0, Math.PI * 2); }
-    ctx.fill();
+    // A handful of draw calls keeps dense glyphs bright and frames translucent.
+    for (const alpha of [.25, .5, .75, 1]) {
+      ctx.globalAlpha = alpha; ctx.beginPath();
+      for (const p of this.assignments.values()) if (p.state === 'HOLDING' && Math.ceil(p.targetOpacity * 4) / 4 === alpha) {
+        ctx.moveTo?.(p.x + p.targetSize, p.y); ctx.arc(p.x, p.y, p.targetSize, 0, Math.PI * 2);
+      }
+      ctx.fill();
+    }
     if (this.presentation) {
       const { layout, timeline, start, typing, cursorUntil } = this.presentation;
       const count = typing ? timeline.filter(t => t <= this.time - start).length : layout.count;
@@ -253,11 +277,11 @@ export class ParticleEngine {
     }
     for (const layout of this.uiLayouts) this.drawEmoji(layout);
     ctx.globalAlpha = 1;
-    const phase = forming ? 'forming' : this.assignments.size ? 'holding' : dispersing ? 'dispersing' : 'floating';
+    const phase = forming ? 'forming' : dispersing ? 'dispersing' : this.assignments.size ? 'holding' : 'floating';
     if (this.canvas.dataset.phase !== phase) this.canvas.dataset.phase = phase;
   };
   destroy() {
-    this.disposed = true; cancelAnimationFrame(this.frame);
+    this.disposed = true; cancelAnimationFrame(this.frame); cancelAnimationFrame(this.refreshFrame);
     window.removeEventListener('resize', this.resize); window.removeEventListener('scroll', this.refresh);
     window.removeEventListener('pointermove', this.move); window.removeEventListener('pointerout', this.leave);
     document.removeEventListener('visibilitychange', this.visibility); this.motion.removeEventListener('change', this.changeMotion);

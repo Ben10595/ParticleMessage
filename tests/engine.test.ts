@@ -71,6 +71,11 @@ test('morphs from current positions, settles exactly, protects glyphs from point
     for (let t = 1600; t < 1900; t += 16.67) frame(t);
     assert.equal(particle.x, 650, 'pointer never shakes held text');
     assert.equal(particle.y, 350);
+    engine.setParticleTargets([{ key: 'letter', x: 650, y: 350 }, { key: 'ui-frame', x: 20, y: 20 }], false);
+    const frameParticle = engine.particles.find(p => p.targetX === 20 && p.targetY === 20)!;
+    engine.disperseText();
+    assert.equal(frameParticle.state, 'HOLDING', 'editor frame survives a preview edit');
+    assert.equal(particle.state, 'DISPERSING', 'only the preview text dissolves');
     const pending = engine.wait(10000);
     engine.destroy();
     await assert.rejects(pending, { name: 'AbortError' });

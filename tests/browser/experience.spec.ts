@@ -118,3 +118,37 @@ test('typing pauses at punctuation and preserves progress on resize', async ({ p
   await expect(page.locator('canvas')).toHaveAttribute('data-visible-characters', '6');
   await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
 });
+
+
+test('one particle pool keeps editor structure while preview text disperses', async ({ page }, testInfo) => {
+  await unlock(page);
+  await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Hallo aus der Punktwolke.');
+  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
+  expect(await page.locator('canvas').count()).toBe(1);
+  const uiCount = Number(await page.locator('canvas').getAttribute('data-ui-target-count'));
+  expect(uiCount).toBeGreaterThan(1000);
+  await expect(page.locator('.editor-panel')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(page.locator('.text-field')).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+  await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Ein neuer Gedanke.');
+  await expect(page.locator('canvas')).toHaveAttribute('data-visible-characters', '18');
+  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
+  expect(Number(await page.locator('canvas').getAttribute('data-ui-target-count'))).toBeGreaterThan(1000);
+  await page.getByText('Feinabstimmung', { exact: false }).click();
+  await expect(page.locator('details')).toHaveAttribute('open', '');
+  await page.getByText('Feinabstimmung', { exact: false }).click();
+  await expect(page.locator('details')).not.toHaveAttribute('open', '');
+  await page.getByLabel('Live-Vorschau').scrollIntoViewIfNeeded();
+  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
+  await page.screenshot({ path: `test-results/cloud-${testInfo.project.name}.png`, fullPage: true });
+});
+
+ test('password and landing form from the cloud', async ({ page }, testInfo) => {
+  await page.goto('/');
+  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
+  await page.screenshot({ path: `test-results/password-${testInfo.project.name}.png` });
+  await page.getByLabel('Passwort', { exact: true }).fill('particle-test');
+  await page.getByRole('button', { name: 'Öffnen' }).click();
+  await expect(page.getByRole('button', { name: 'Nachricht schreiben' })).toBeVisible();
+  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
+  await page.screenshot({ path: `test-results/landing-${testInfo.project.name}.png` });
+});
