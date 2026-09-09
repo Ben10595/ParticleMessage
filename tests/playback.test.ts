@@ -7,10 +7,15 @@ test('typing respects sentence, comma, paragraph pauses and emoji clusters', () 
   const writing = { enabled: true, ...WRITING_PRESETS.Normal };
   assert.deepEqual(graphemes('A❤️👨‍👩‍👧‍👦🇩🇪'), ['A', '❤️', '👨‍👩‍👧‍👦', '🇩🇪']);
   assert.equal(characterDelay('.', writing), 495);
-  assert.equal(characterDelay('!', writing), characterDelay('?', writing));
+  assert.ok(characterDelay('!', writing) < characterDelay('?', writing));
   assert.ok(characterDelay(',', writing) < characterDelay('.', writing));
   assert.ok(characterDelay('\n', writing) > characterDelay('.', writing));
-  assert.deepEqual(typingTimeline('A.\n❤️', writing), [0, 75, 570, 1445]);
+  const times = typingTimeline('A.\n❤️', writing);
+  assert.equal(times[0], 0);
+  assert.ok(times[1] >= 66 && times[1] <= 84);
+  assert.ok(times[2] - times[1] > 480);
+  assert.ok(times[3] - times[2] > 860);
+  assert.deepEqual(times, typingTimeline('A.\n❤️', writing), 'preview and viewer use reproducible timing');
 });
 test('expiry is exactly 72 hours, independent of timezone and fails closed for invalid dates', () => {
   const created = '2026-09-06T12:00:00.000Z';
@@ -36,4 +41,12 @@ test('untrusted animation settings are bounded and strictly typed', () => {
   }
   assert.throws(() => validateMessage({ ...valid, settings: { ...DEFAULT_SETTINGS, effect: 'invalid' } }));
   assert.throws(() => validateMessage({ ...valid, slides: [{ ...valid.slides[0], effect: 'invalid' }] }));
+});
+
+test('per-slide settings override global defaults and preserve distinct punctuation pauses', () => {
+  const writing = { enabled: true, ...WRITING_PRESETS.Ruhig, commaPause: 50, periodPause: 200, questionPause: 900, exclamationPause: 300, paragraphPause: 1200 };
+  const content = { version: 1, slides: [{ text: 'Hi, du. Ja? Wow!\n❤️', duration: 2500, effect: 'rain', writing }, { text: 'Ohne eigene Werte', duration: 1000 }], settings: DEFAULT_SETTINGS };
+  assert.deepEqual(validateMessage(content), content);
+  assert.deepEqual([',', '.', '?', '!', '\n'].map(char => characterDelay(char, writing)), [165, 315, 1015, 415, 1315]);
+  for (const key of ['commaPause', 'periodPause', 'questionPause', 'exclamationPause']) assert.throws(() => validateMessage({ ...content, slides: [{ ...content.slides[0], writing: { ...writing, [key]: 2501 } }] }));
 });

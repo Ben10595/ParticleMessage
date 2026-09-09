@@ -15,7 +15,7 @@ Anschließend http://localhost:3000 öffnen. Die Startseite führt zum Editor. E
 
 ## Umgebungsvariablen
 
-Die angeforderte `.env.local` ist bereits eingerichtet und von Git ausgeschlossen. Für andere Installationen `.env.example` nach `.env.local` kopieren:
+Die angeforderte `.env.local` ist bereits eingerichtet und von Git ausgeschlossen. Das angeforderte Passwort wird ausschließlich serverseitig in `.env.local` gesetzt. Für andere Installationen `.env.example` nach `.env.local` kopieren:
 
 ```dotenv
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
@@ -24,9 +24,9 @@ PARTICLE_MESSAGE_PASSWORD=choose-a-password
 PARTICLE_MESSAGE_SESSION_SECRET=generate-a-long-random-value
 ```
 
-`PARTICLE_MESSAGE_PASSWORD` schützt Startseite und Editor. Nach erfolgreicher serverseitiger Prüfung setzt die App ein signiertes, nur für die Browser-Sitzung gültiges HttpOnly-Cookie. Geteilte Routen unter `/p/[slug]` bleiben direkt und ohne Passwort erreichbar. Für `PARTICLE_MESSAGE_SESSION_SECRET` sollte pro Installation ein langer zufälliger Wert verwendet werden.
+`PARTICLE_MESSAGE_PASSWORD` schützt Startseite und Editor. Nach erfolgreicher serverseitiger Prüfung setzt die App ein mit HMAC signiertes HttpOnly-Cookie mit zufälliger Nonce, SameSite=Strict und serverseitig geprüfter Frist von höchstens sieben Tagen. Es ist ein Browser-Sitzungscookie; in Production wird zusätzlich Secure gesetzt. Geteilte Routen unter `/p/[slug]` bleiben direkt und ohne Passwort erreichbar. Für `PARTICLE_MESSAGE_SESSION_SECRET` sollte pro Installation ein langer zufälliger Wert verwendet werden.
 
-Es wird ausschließlich der öffentliche Publishable Key verwendet. Er ist absichtlich im Browser verfügbar. **Keinen Secret Key oder Service Role Key einsetzen.** Es gibt keine Supabase-Auth-Sitzungen. Nach Änderungen an der Umgebung den Entwicklungsserver neu starten.
+Es wird ausschließlich der öffentliche Publishable Key verwendet. Er ist absichtlich im Browser verfügbar. **Keinen Secret Key oder Service Role Key einsetzen.** Es gibt keine Auth-Sitzungen. Nach Änderungen an der Umgebung den Entwicklungsserver neu starten.
 
 ## Supabase
 
@@ -65,11 +65,11 @@ Grundlage: [Supabase Cron](https://supabase.com/docs/guides/cron/quickstart) und
 
 ## Partikelsystem
 
-Der bestehende Canvas-Pool und seine Zustände bleiben erhalten. Ein dichtes Textraster mit präzisen Ruhepositionen ersetzt das flimmernde Schriftbild. Titel, Texte ab 18 px, Rahmen, Buttons, Eingabekanten, Vorschauflächen, Schalter und Slider entstehen aus demselben Partikelpool. Transparente HTML-Controls bleiben als barrierefreie Bedienfläche erhalten; kleine Beschriftungen und Eingabetexte bleiben nativ lesbar. Emojis werden als vollständige Unicode-Grapheme nativ gezeichnet. Die Textziele und Umbrüche werden pro Inhalt/Layout berechnet und zwischengespeichert, Schreibanimationen laufen ohne React-Updates pro Zeichen.
+Ein persistenter Canvas-Pool verbindet Passwortseite, Startseite, Editor, Vorschau und Erfolg. Die Zustände FLOATING, FORMING, HOLDING, MORPHING und DISPERSING beschreiben den Lebenszyklus jedes Punktes. Ein dichtes Textraster mit präzisen Ruhepositionen ersetzt das flimmernde Schriftbild. Titel, kleine Beschriftungen, Rahmen, Buttons, Eingabekanten, Navigation, Schalter, Slider, Link und Branding entstehen aus demselben Partikelpool. Transparente HTML-Controls bleiben als barrierefreie Bedienfläche erhalten. Während der Eingabe bleiben Textarea und Passwortfeld nativ lesbar; Emoji-Auswahl und Unicode-Emoji werden optimiert nativ dargestellt. Emojis werden als vollständige Unicode-Grapheme nativ gezeichnet. Die Textziele und Umbrüche werden pro Inhalt/Layout berechnet und zwischengespeichert, Schreibanimationen laufen ohne React-Updates pro Zeichen.
 
-Der Editor bündelt Textänderungen für 380 ms und löst die Vorschau vor dem erneuten Formen weich auf. Bestehende Partikel werden über stabile Schlüssel und räumliche Zuordnung wiederverwendet. Neun Übergänge, vier Schreibpresets, eigene Pausenwerte, Haltezeiten und ein optionales Finale werden als optionale `settings` bzw. `slides[].effect` im weiterhin kompatiblen Version-1-Format gespeichert. Alte Nachrichten verwenden Smooth Morph ohne Schreibanimation.
+Der Editor bündelt Textänderungen für 380 ms und lockert die Vorschau für 180 ms, ohne die zugewiesenen Partikel zu verwerfen. Anschließend werden kurze Wege zu den neuen Buchstaben bevorzugt. Die Live-Vorschau wiederholt den aktuellen Abschnitt mit echtem Schreibtiming, Partikelcursor, Übergang und Haltezeit. Die Gesamtvorschau kehrt nach dem letzten Abschnitt automatisch zum Editor zurück. Bestehende Partikel werden über stabile Schlüssel und räumliche Zuordnung wiederverwendet. Sieben Übergänge (Smooth Morph, Scatter, Wave, Whirl, Rain, Collapse, Random), vier Schreibpresets, getrennte Pausen für Komma/Punkt/Fragezeichen/Ausrufezeichen/Zeilenumbruch und Haltezeiten werden pro Abschnitt gespeichert: `slides[].effect`, `slides[].writing` und `slides[].duration`. Bestehende globale `settings`, das frühere Finale und alte Übergangsnamen werden weiterhin gelesen. Die Datenbankstruktur und Formatversion 1 bleiben unverändert. Alte Nachrichten verwenden Smooth Morph ohne Schreibanimation.
 
-Textpartikel haben Vorrang vor Hintergrundpartikeln. Bei schlechter Bildrate reduziert die Engine den Hintergrund und entfernt überzählige freie Partikel; ruhende Textpunkte werden gemeinsam gezeichnet. DPR ist auf 2 begrenzt, unsichtbare Tabs pausieren die Animationszeit. `prefers-reduced-motion` überspringt Flug- und Schreibbewegungen. Ohne Canvas bleiben Editor und Nachrichten als HTML nutzbar.
+Offscreen-Sampling mit doppelter Auflösung, adaptive Punktabstände und ein Layout-Cache sorgen für scharfe Konturen. Die Engine nutzt sanft beschleunigte Pfade und gedämpfte Federn; gehaltene Textpunkte stehen exakt still. Textpartikel haben Vorrang vor Hintergrundpartikeln. Der Grundpool umfasst etwa 1.400 Punkte mobil und 3.000 am Desktop; dichte Partikelschrift und sämtliche Editorbeschriftungen erweitern ihn bei Bedarf deutlich über 4.000 Punkte. Diese bewusste Ausnahme priorisiert Lesbarkeit. Bei schlechter Bildrate reduziert die Engine den Hintergrund und entfernt überzählige freie Partikel; ruhende Textpunkte werden gemeinsam gezeichnet. DPR ist auf 2 begrenzt, unsichtbare Tabs pausieren die Animationszeit. `prefers-reduced-motion` überspringt Flug- und Schreibbewegungen. Ohne Canvas bleiben Editor und Nachrichten als HTML nutzbar.
 
 ## Prüfungen
 
@@ -82,7 +82,7 @@ npm run test:browser
 npm start
 ```
 
-Unit-Tests prüfen Format, Unicode, Slugs, Authentifizierung, Pausen, Ablaufgrenzen und Partikelbewegungen. Die Browser-Tests verwenden Chrome, starten den Production-Build mit ausschließlich lokalen Test-Zugangsdaten und simulieren Supabase-Antworten. Vorher einen eventuell laufenden Server auf Port 3000 beenden. Der echte Supabase-Rundlauf und die entfernte SQL-Migration sind separat zu verifizieren.
+Unit-Tests prüfen Format, Unicode, Slugs, Authentifizierung, Pausen, Ablaufgrenzen und Partikelbewegungen. Die Browser-Tests verwenden Chrome, starten den Production-Build mit ausschließlich lokalen Test-Zugangsdaten und simulieren Supabase-Antworten. Der Testserver läuft isoliert auf Port 3200. Der echte Supabase-Rundlauf wurde zusätzlich geprüft; Details stehen in `TESTING.md`. Die entfernte SQL-Migration wurde nicht verändert oder ausgeführt.
 
 ## Deployment auf Vercel
 

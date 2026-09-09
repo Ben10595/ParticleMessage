@@ -7,3 +7,10 @@ export function createRectangleTargets(x: number, y: number, width: number, heig
   return [...createLineTargets(x, y, x + width, y, spacing), ...createLineTargets(x + width, y, x + width, y + height, spacing), ...createLineTargets(x + width, y + height, x, y + height, spacing), ...createLineTargets(x, y + height, x, y, spacing)];
 }
 export function createButtonTargets(x: number, y: number, width: number, height: number) { return createRectangleTargets(x, y, width, height, 5); }
+export function createIconTargets(icon: 'plus' | 'close' | 'arrow' | 'heart', x: number, y: number, size = 18): Target[] {
+  const half = size / 2;
+  if (icon === 'plus') return [...createLineTargets(x - half, y, x + half, y, 2), ...createLineTargets(x, y - half, x, y + half, 2)];
+  if (icon === 'close') return [...createLineTargets(x - half, y - half, x + half, y + half, 2), ...createLineTargets(x + half, y - half, x - half, y + half, 2)];
+  if (icon === 'arrow') return [...createLineTargets(x - half, y, x + half, y, 2), ...createLineTargets(x, y - half, x + half, y, 2), ...createLineTargets(x, y + half, x + half, y, 2)];
+  return Array.from({ length: 36 }, (_, i) => { const t = i / 36 * Math.PI * 2; return { x: x + half * Math.sin(t) ** 3, y: y - size / 32 * (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)), size: .8 }; });
+}

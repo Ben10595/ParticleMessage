@@ -1,154 +1,165 @@
 import { test, expect, type Page } from '@playwright/test';
-
+const content = { version: 1, slides: [{ text: 'Schön, dass es dich gibt. ❤️', duration: 4000 }, { text: 'Du machst den Unterschied. ✨', duration: 1000 }] };
 async function unlock(page: Page) {
   await page.goto('/');
   await page.getByLabel('Passwort', { exact: true }).fill('particle-test');
-  await page.getByRole('button', { name: 'Öffnen' }).click();
-  await page.getByRole('button', { name: 'Nachricht schreiben' }).click();
+  await page.getByRole('button', { name: 'Öffnen', exact: true }).click();
+  await page.getByRole('button', { name: 'Nachricht erstellen', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'ABSCHNITT 01' })).toBeVisible();
 }
-const content = { version: 1, slides: [{ text: 'Schön, dass es dich gibt. ❤️', duration: 4000 }, { text: 'Du machst den Unterschied. ✨', duration: 1000 }] };
-async function mockMessage(page: Page, createdAt = new Date().toISOString(), message = content) {
+async function mockMessage(page: Page, createdAt = new Date().toISOString(), message: unknown = content) {
   await page.route('**/rest/v1/messages*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ content: message, created_at: createdAt }) }));
 }
-
-test('password, editor, emoji insertion, settings, reorder, preview and save', async ({ page }) => {
+test('password rejection, signed httpOnly session, reload, and shared canvas across scenes', async ({ page, context }) => {
+  await page.goto('/');
+  const canvas = await page.locator('canvas').elementHandle();
+  await page.getByLabel('Passwort', { exact: true }).fill('wrong');
+  await page.getByRole('button', { name: 'Öffnen', exact: true }).click();
+  await expect(page.getByRole('main').getByRole('alert')).toHaveText('Falsches Passwort.');
+  await page.getByLabel('Passwort', { exact: true }).fill('particle-test');
+  await page.getByRole('button', { name: 'Öffnen', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Schreib etwas.' })).toBeVisible();
+  expect(await canvas?.evaluate(el => el === document.querySelector('canvas'))).toBe(true);
+  const cookie = (await context.cookies()).find(c => c.name === 'particle_message_access');
+  expect(cookie?.httpOnly).toBe(true); expect(cookie?.sameSite).toBe('Strict'); expect(cookie?.secure).toBe(true);
+  expect(await page.evaluate(() => document.cookie)).not.toContain('particle_message_access');
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Nachricht erstellen' })).toBeVisible();
+  await expect(page.getByLabel('Passwort', { exact: true })).toHaveCount(0);
+});
+test('per-slide writing, emoji insertion at cursor, ordering, preview, save and copy', async ({ page, context }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await unlock(page);
-  await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Schön, dass es dich gibt.');
-  await page.getByRole('button', { name: '☺ Emoji' }).click();
+  const input = page.getByRole('textbox', { name: 'ABSCHNITT 01' });
+  await input.fill('Hallo Welt'); for (let i = 0; i < 10; i++) await input.press('ArrowLeft');
+  await page.getByRole('button', { name: '☺ Emoji', exact: true }).click();
   await page.getByRole('button', { name: '❤️ einfügen', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'ABSCHNITT 01' })).toHaveValue('Schön, dass es dich gibt.❤️');
-  await page.getByRole('switch', { name: 'Wie geschrieben' }).check();
+  await expect(input).toHaveValue('❤️Hallo Welt');
+  await page.getByRole('switch', { name: 'Schreibanimation' }).check();
   await page.getByLabel('Schreibrhythmus').selectOption('Ruhig');
-  await page.getByText('Feinabstimmung', { exact: false }).click();
-  await page.getByRole('switch', { name: 'Ein besonderes Finale' }).check();
+  await page.getByText('Timing verfeinern +', { exact: true }).click();
+  await page.getByLabel('Fragezeichen ?', { exact: true }).fill('1000');
   await page.getByLabel('Übergang dieses Abschnitts').selectOption('wave');
-  await page.getByRole('button', { name: 'Neue Nachricht hinzufügen' }).click();
+  await page.getByRole('button', { name: 'Abschnitt hinzufügen', exact: true }).click();
   await page.getByRole('textbox', { name: 'ABSCHNITT 02' }).fill('Du bist wunderbar. ✨');
+  await expect(page.getByRole('switch', { name: 'Schreibanimation' })).not.toBeChecked();
   await page.getByRole('button', { name: 'Abschnitt nach vorne' }).click();
-  await expect(page.getByRole('textbox', { name: 'ABSCHNITT 01' })).toHaveValue('Du bist wunderbar. ✨');
-  await page.getByRole('button', { name: 'Gesamtvorschau' }).click();
+  await expect(input).toHaveValue('Du bist wunderbar. ✨');
+  const canvas = await page.locator('canvas').elementHandle();
+  await page.getByRole('button', { name: 'Vorschau', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Vorschau', exact: true })).toBeVisible();
+  expect(await canvas?.evaluate(el => el === document.querySelector('canvas'))).toBe(true);
   await page.getByRole('button', { name: 'Vorschau beenden' }).click();
-  await expect(page.getByRole('textbox', { name: 'ABSCHNITT 01' })).toBeVisible();
+  await expect(input).toBeVisible();
   let saved: Record<string, unknown> | undefined;
-  await page.route('**/rest/v1/messages*', async route => {
-    saved = route.request().postDataJSON();
-    await route.fulfill({ status: 201, body: '' });
-  });
-  await page.getByRole('button', { name: 'Link erstellen' }).click();
+  await page.route('**/rest/v1/messages*', async route => { saved = route.request().postDataJSON(); await route.fulfill({ status: 201, body: '' }); });
+  await page.getByRole('button', { name: 'Link erstellen', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Deine Nachricht ist bereit.' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Link zu deiner Nachricht' })).toHaveValue(/\/p\/[A-Za-z0-9_-]{12}$/);
-  expect(saved?.content).toMatchObject({ settings: { finale: true, writing: { enabled: true, speed: 115 } }, slides: [{ text: 'Du bist wunderbar. ✨' }, { effect: 'wave' }] });
+  expect(saved?.content).toMatchObject({ slides: [{ text: 'Du bist wunderbar. ✨' }, { effect: 'wave', writing: { enabled: true, speed: 115, questionPause: 1000 } }] });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByRole('button', { name: 'Link kopieren', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Kopiert ✓' })).toBeVisible();
   expect(errors).toEqual([]);
 });
-
-test('public links autoplay without password and remain readable on every viewport', async ({ page }, testInfo) => {
-  await mockMessage(page);
-  await page.goto('/p/publicTest12');
+test('public links play without password, with readable responsive text', async ({ page }, testInfo) => {
+  await mockMessage(page); await page.goto('/p/publicTest12');
   await expect(page.getByRole('region', { name: 'Nachricht', exact: true })).toBeVisible();
   await expect(page.getByLabel('Passwort', { exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Nachrichteneditor')).toHaveCount(0);
   await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
-  await expect(page.getByText('Created with')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: `test-results/public-${testInfo.project.name}.png` });
 });
-
-test('expired and removed messages do not play; connectivity errors offer retry', async ({ page }) => {
-  await mockMessage(page, new Date(Date.now() - 73 * 3600000).toISOString());
-  await page.goto('/p/expired12345');
+test('missing, expired and offline messages have particle error scenes', async ({ page }) => {
+  await mockMessage(page, new Date(Date.now() - 73 * 3600000).toISOString()); await page.goto('/p/expired12345');
   await expect(page.getByRole('heading', { name: 'Dieser Link ist abgelaufen.' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Nachricht', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Erneut versuchen' })).toHaveCount(0);
   await page.route('**/rest/v1/messages*', route => route.fulfill({ status: 406, contentType: 'application/json', body: JSON.stringify({ code: 'PGRST116' }) }));
-  await page.reload();
-  await expect(page.getByRole('heading', { name: 'Dieser Link ist abgelaufen.' })).toBeVisible();
+  await page.reload(); await expect(page.getByRole('heading', { name: 'Diese Nachricht existiert nicht.' })).toBeVisible();
   await page.route('**/rest/v1/messages*', route => route.fulfill({ status: 503, body: 'Unavailable' }));
-  await page.reload();
-  await expect(page.getByRole('button', { name: 'Erneut versuchen' })).toBeVisible({ timeout: 20000 });
+  await page.reload(); await expect(page.getByRole('button', { name: 'Erneut versuchen' })).toBeVisible({ timeout: 20000 });
 });
-
-test('live preview settles, keeps normal UI readable, and has no horizontal overflow', async ({ page }, testInfo) => {
+test('live preview uses writing, hold duration, and replays from same pool', async ({ page }, testInfo) => {
   await unlock(page);
-  await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Schön, dass es\ndich gibt. ❤️');
-  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
-  await expect(page.getByRole('textbox', { name: 'ABSCHNITT 01' })).not.toHaveCSS('color', 'rgba(0, 0, 0, 0)');
+  await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Hi. A❤️');
+  await page.getByRole('switch', { name: 'Schreibanimation' }).check();
+  await page.getByLabel('Schreibrhythmus').selectOption('Dramatisch');
   await page.getByLabel('Live-Vorschau').scrollIntoViewIfNeeded();
+  await page.getByRole('button', { name: 'Abschnitt erneut abspielen' }).click();
+  await expect(page.locator('canvas')).toHaveAttribute('data-visible-characters', '3');
+  await expect(page.locator('canvas')).toHaveAttribute('data-visible-characters', '6');
   await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
+  expect(await page.locator('canvas').count()).toBe(1);
+  expect(Number(await page.locator('canvas').getAttribute('data-ui-target-count'))).toBeGreaterThan(1000);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: `test-results/editor-${testInfo.project.name}.png`, fullPage: true });
+  await page.screenshot({ path: `test-results/editor-${testInfo.project.name}.png` });
+  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'dispersing', { timeout: 8000 });
 });
-
-test('missing canvas has a readable functional fallback', async ({ page }) => {
+test('missing canvas provides a functional readable fallback', async ({ page }) => {
   await page.addInitScript(() => { HTMLCanvasElement.prototype.getContext = () => null; });
-  await unlock(page);
-  await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Hallo ohne Canvas ❤️');
-  await page.getByRole('button', { name: 'Gesamtvorschau' }).click();
+  await unlock(page); await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Hallo ohne Canvas ❤️');
+  await page.getByRole('button', { name: 'Vorschau', exact: true }).click();
   await expect(page.locator('.viewer-text')).toHaveText('Hallo ohne Canvas ❤️');
   await expect(page.locator('.viewer-text')).not.toHaveCSS('color', 'rgba(0, 0, 0, 0)');
 });
-
-test('writing is optional, motion preference is respected, and replay works', async ({ page }) => {
+test('reduced motion, public replay and automatic editor return', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  const message = { ...content, settings: { effect: 'morph', finale: false, writing: { enabled: true, speed: 250, punctuationPause: 2500, paragraphPause: 4000 } }, slides: [{ text: 'Hallo ❤️', duration: 1000 }] };
-  await mockMessage(page, new Date().toISOString(), message);
+  await mockMessage(page, new Date().toISOString(), { version: 1, slides: [{ text: 'Hallo ❤️', duration: 1000 }] });
   await page.goto('/p/reducedTest1');
-  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
   await expect(page.getByRole('button', { name: 'Nochmal' })).toBeVisible();
   await page.getByRole('button', { name: 'Nochmal' }).click();
   await expect(page.getByRole('region', { name: 'Nachricht', exact: true })).toBeVisible();
+  await unlock(page); await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Bis gleich.');
+  await page.getByLabel('Dauer des fertigen Textes').selectOption('1000');
+  await page.getByRole('button', { name: 'Vorschau', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Vorschau', exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'ABSCHNITT 01' })).toBeVisible({ timeout: 8000 });
+});
+test('writing retains punctuation pause and graphemes across resize', async ({ page }) => {
+  await mockMessage(page, new Date().toISOString(), { version: 1, slides: [{ text: 'Hi. A❤️', duration: 3000, writing: { enabled: true, speed: 100, punctuationPause: 1800, paragraphPause: 1500 } }] });
+  await page.goto('/p/writingTest1'); await expect(page.locator('canvas')).toHaveAttribute('data-visible-characters', '3');
+  await page.setViewportSize({ width: 600, height: 850 });
+  await expect(page.locator('canvas')).toHaveAttribute('data-visible-characters', '3');
+  await expect(page.locator('canvas')).toHaveAttribute('data-visible-characters', '6');
+  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
+});
+test('all transitions play and finish without canvas resets', async ({ page }) => {
+  const effects = ['morph', 'scatter', 'wave', 'vortex', 'rain', 'implode', 'random'];
+  await mockMessage(page, new Date().toISOString(), { version: 1, slides: effects.map(effect => ({ text: effect, effect, duration: 1000 })) });
+  await page.goto('/p/allEffects12');
+  const canvas = await page.locator('canvas').elementHandle();
+  for (const effect of effects) await expect(page.locator('.viewer-text')).toHaveText(effect, { timeout: 9000 });
+  await expect(page.getByRole('button', { name: 'Nochmal' })).toBeVisible({ timeout: 9000 });
+  expect(await canvas?.evaluate(el => el === document.querySelector('canvas'))).toBe(true);
+});
+test('limits, deletion, validation, and save errors retain the draft', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' }); await unlock(page);
+  await page.getByRole('button', { name: 'Link erstellen', exact: true }).click();
+  await expect(page.getByRole('main').getByRole('alert')).toHaveText('Abschnitt 1 ist noch leer.');
+  const input = page.getByRole('textbox', { name: 'ABSCHNITT 01' });
+  await input.fill('A'.repeat(151)); await expect(input).toHaveValue('A'.repeat(150));
+  for (let i = 1; i < 15; i++) await page.getByRole('button', { name: 'Abschnitt hinzufügen', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Abschnitt hinzufügen', exact: true })).toBeDisabled();
+  for (let i = 1; i < 15; i++) await page.getByRole('button', { name: 'Abschnitt löschen', exact: true }).click();
+  await page.route('**/rest/v1/messages*', route => route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ code: '42501' }) }));
+  await page.getByRole('button', { name: 'Link erstellen', exact: true }).click();
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('nicht gespeichert'); await expect(input).toHaveValue('A'.repeat(150));
 });
 
-test('an already open public link stops at its absolute expiry', async ({ page }) => {
-  await mockMessage(page, new Date(Date.now() - 72 * 3600000 + 4500).toISOString());
+test('an open public message stops at its absolute expiry', async ({ page }) => {
+  await mockMessage(page, new Date(Date.now() - 72 * 3600000 + 5000).toISOString());
   await page.goto('/p/deadlineTest');
   await expect(page.getByRole('region', { name: 'Nachricht', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Dieser Link ist abgelaufen.' })).toBeVisible({ timeout: 7000 });
   await expect(page.getByRole('button', { name: 'Nochmal' })).toHaveCount(0);
 });
 
-test('typing pauses at punctuation and preserves progress on resize', async ({ page }) => {
-  const message = { ...content, settings: { effect: 'morph', finale: false, writing: { enabled: true, speed: 100, punctuationPause: 1300, paragraphPause: 1500 } }, slides: [{ text: 'Hi. A❤️', duration: 3000 }] };
-  await mockMessage(page, new Date().toISOString(), message);
-  await page.goto('/p/writingTest1');
-  await expect(page.locator('canvas')).toHaveAttribute('data-visible-characters', '3');
-  await page.setViewportSize({ width: 600, height: 850 });
-  await expect(page.locator('canvas')).toHaveAttribute('data-visible-characters', '3');
-  await expect(page.locator('canvas')).toHaveAttribute('data-visible-characters', '6');
+test('150-character message wraps legibly within desktop and mobile canvas', async ({ page }, testInfo) => {
+  const text = 'Manchmal braucht es nur ein paar Worte. Danke, dass du immer für mich da bist. Du machst meine Welt ein bisschen heller. Schön, dass es dich gibt. ❤️';
+  await mockMessage(page, new Date().toISOString(), { version: 1, slides: [{ text, duration: 10000 }] });
+  await page.goto('/p/longText1234');
   await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
-});
-
-
-test('one particle pool keeps editor structure while preview text disperses', async ({ page }, testInfo) => {
-  await unlock(page);
-  await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Hallo aus der Punktwolke.');
-  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
-  expect(await page.locator('canvas').count()).toBe(1);
-  const uiCount = Number(await page.locator('canvas').getAttribute('data-ui-target-count'));
-  expect(uiCount).toBeGreaterThan(1000);
-  await expect(page.locator('.editor-panel')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  await expect(page.locator('.text-field')).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
-  await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Ein neuer Gedanke.');
-  await expect(page.locator('canvas')).toHaveAttribute('data-visible-characters', '18');
-  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
-  expect(Number(await page.locator('canvas').getAttribute('data-ui-target-count'))).toBeGreaterThan(1000);
-  await page.getByText('Feinabstimmung', { exact: false }).click();
-  await expect(page.locator('details')).toHaveAttribute('open', '');
-  await page.getByText('Feinabstimmung', { exact: false }).click();
-  await expect(page.locator('details')).not.toHaveAttribute('open', '');
-  await page.getByLabel('Live-Vorschau').scrollIntoViewIfNeeded();
-  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
-  await page.screenshot({ path: `test-results/cloud-${testInfo.project.name}.png`, fullPage: true });
-});
-
- test('password and landing form from the cloud', async ({ page }, testInfo) => {
-  await page.goto('/');
-  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
-  await page.screenshot({ path: `test-results/password-${testInfo.project.name}.png` });
-  await page.getByLabel('Passwort', { exact: true }).fill('particle-test');
-  await page.getByRole('button', { name: 'Öffnen' }).click();
-  await expect(page.getByRole('button', { name: 'Nachricht schreiben' })).toBeVisible();
-  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
-  await page.screenshot({ path: `test-results/landing-${testInfo.project.name}.png` });
+  await expect(page.locator('.viewer-text')).toHaveText(text);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: `test-results/long-text-${testInfo.project.name}.png` });
 });

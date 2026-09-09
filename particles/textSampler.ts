@@ -18,7 +18,7 @@ export function wrapText(ctx: Pick<CanvasRenderingContext2D, 'measureText'>, tex
   }
   return lines;
 }
-export interface TextOptions { x: number; y: number; width: number; height: number; fontSize: number; align?: 'left' | 'center'; weight?: number; spacing?: number; fit?: boolean; opacity?: number; verticalAlign?: 'top' | 'center' }
+export interface TextOptions { x: number; y: number; width: number; height: number; fontSize: number; align?: 'left' | 'center'; weight?: number; spacing?: number; fit?: boolean; opacity?: number; nowrap?: boolean; verticalAlign?: 'top' | 'center' }
 export interface Glyph { text: string; index: number; x: number; y: number; width: number; emoji: boolean }
 export interface TextLayout { targets: Target[]; glyphs: Glyph[]; cursors: { x: number; y: number }[]; fontSize: number; count: number }
 const cache = new Map<string, TextLayout>();
@@ -26,7 +26,7 @@ const emojiPattern = /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20e3/u;
 export function createTextLayout(text: string, options: TextOptions): TextLayout {
   const { x, y, width, height, align = 'center', weight = 600, fit = false, opacity = 1 } = options;
   if (!text || width < 1 || height < 1) return { targets: [], glyphs: [], cursors: [], fontSize: options.fontSize, count: 0 };
-  const key = JSON.stringify([text, Math.round(width), Math.round(height), options.fontSize, align, weight, options.spacing, fit, options.verticalAlign]);
+  const key = JSON.stringify([text, Math.round(width), Math.round(height), options.fontSize, align, weight, options.spacing, fit, options.verticalAlign, options.nowrap]);
   let layout = cache.get(key);
   if (!layout) {
     canvas ??= document.createElement('canvas');
@@ -37,6 +37,7 @@ export function createTextLayout(text: string, options: TextOptions): TextLayout
     let lines: { text: string; index: number }[][] = [];
     do {
       ctx.font = `${weight} ${fontSize}px Arial, sans-serif`;
+      if (options.nowrap && ctx.measureText(text).width > width && fontSize > 8) { fontSize -= .5; continue; }
       lines = [[]];
       let lineWidth = 0;
       for (let index = 0; index < characters.length; index++) {
@@ -47,16 +48,18 @@ export function createTextLayout(text: string, options: TextOptions): TextLayout
         if (char !== ' ' && (index === 0 || /[\s]/u.test(characters[index - 1]))) {
           let word = char;
           for (let j = index + 1; j < characters.length && !/\s/u.test(characters[j]); j++) word += characters[j];
-          if (lineWidth > 0 && lineWidth + ctx.measureText(word).width > width - 8) { lines.push([]); lineWidth = 0; }
+          if (!options.nowrap && lineWidth > 0 && lineWidth + ctx.measureText(word).width > width + .5) { lines.push([]); lineWidth = 0; }
         }
-        if (lineWidth + charWidth > width - 8 && lineWidth > 0) { lines.push([]); lineWidth = 0; }
+        if (!options.nowrap && lineWidth + charWidth > width + .5 && lineWidth > 0) { lines.push([]); lineWidth = 0; }
         lines[lines.length - 1].push({ text: char, index }); lineWidth += charWidth;
       }
-      if (!fit || lines.length * fontSize * 1.35 <= height || fontSize <= 14) break;
+      if (!fit || lines.length * fontSize * 1.35 <= height || fontSize <= 8) break;
       fontSize -= 1;
     } while (true);
-    const spacing = options.spacing ?? Math.max(1.45, Math.min(3.1, fontSize / 28));
-    canvas.width = Math.ceil(width); canvas.height = Math.ceil(height);
+    const spacing = options.spacing ?? Math.max(1.15, Math.min(3.25, fontSize / 30));
+    const resolution = 2;
+    canvas.width = Math.ceil(width * resolution); canvas.height = Math.ceil(height * resolution);
+    ctx.setTransform(resolution, 0, 0, resolution, 0, 0);
     ctx.font = `${weight} ${fontSize}px Arial, sans-serif`;
     ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle';
     const lineHeight = fontSize * 1.35;
@@ -65,7 +68,7 @@ export function createTextLayout(text: string, options: TextOptions): TextLayout
     const cursors: TextLayout['cursors'] = [];
     lines.forEach((line, row) => {
       const lineWidth = line.reduce((sum, char) => sum + (char.text === '\n' ? 0 : ctx.measureText(char.text).width), 0);
-      let left = align === 'center' ? (width - lineWidth) / 2 : 4;
+      let left = align === 'center' ? (width - lineWidth) / 2 : 0;
       line.forEach(char => {
         const glyphWidth = char.text === '\n' ? 0 : ctx.measureText(char.text).width;
         const glyph = { ...char, x: left, y: top + row * lineHeight, width: glyphWidth, emoji: emojiPattern.test(char.text) };
@@ -82,13 +85,13 @@ export function createTextLayout(text: string, options: TextOptions): TextLayout
       if (glyph.emoji || /\s/u.test(glyph.text)) continue;
       for (let py = Math.max(0, Math.floor(glyph.y - fontSize * .65)), row = 0; py < Math.min(height, glyph.y + fontSize * .65); py += spacing, row++) {
         for (let px = Math.max(0, glyph.x), col = 0; px < Math.min(width, glyph.x + glyph.width); px += spacing, col++) {
-          const alpha = pixels[(Math.floor(py) * canvas.width + Math.floor(px)) * 4 + 3] / 255;
-          if (alpha > .35) targets.push({ x: px, y: py, size: spacing * .39, opacity: Math.min(1, .75 + alpha * .25), key: `glyph-${glyph.index}-${row}-${col}`, glyph: glyph.index, delay: 0 });
+          const alpha = pixels[(Math.floor(py * resolution) * canvas.width + Math.floor(px * resolution)) * 4 + 3] / 255;
+          if (alpha > .35) targets.push({ x: px, y: py, size: spacing * (fontSize < 60 ? .47 : .41), opacity: Math.min(1, .75 + alpha * .25), key: `glyph-${glyph.index}-${row}-${col}`, glyph: glyph.index, delay: 0 });
         }
       }
     }
     layout = { targets, glyphs, cursors, fontSize, count: characters.length };
-    if (cache.size >= 24) cache.delete(cache.keys().next().value!);
+    if (cache.size >= 128) cache.delete(cache.keys().next().value!);
     cache.set(key, layout);
   }
   return { ...layout, targets: layout.targets.map(p => ({ ...p, x: p.x + x, y: p.y + y, opacity: (p.opacity ?? 1) * opacity })), glyphs: layout.glyphs.map(g => ({ ...g, x: g.x + x, y: g.y + y })), cursors: layout.cursors.map(c => ({ x: c.x + x, y: c.y + y })) };

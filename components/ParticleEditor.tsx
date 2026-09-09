@@ -1,15 +1,26 @@
 'use client';
 import { useRef, useState } from 'react';
-import { MAX_SLIDES, MAX_TEXT_LENGTH, MAX_DURATION, MIN_DURATION, EFFECTS, EFFECT_LABELS, WRITING_PRESETS, type Slide, type MessageSettings, type TransitionEffect } from '@/types/message';
+import { MAX_SLIDES, MAX_TEXT_LENGTH, EFFECTS, EFFECT_LABELS, WRITING_PRESETS, slideSettings, type Slide, type MessageSettings, type TransitionEffect, type WritingSettings } from '@/types/message';
 import type { ParticleEngine } from '@/particles/ParticleEngine';
 import LivePreview from './LivePreview';
-interface Props { previewActive: boolean; slides: Slide[]; settings: MessageSettings; engine: ParticleEngine | null; active: number; onSelect: (index: number) => void; onChange: (slides: Slide[]) => void; onSettings: (settings: MessageSettings) => void; onPreview: () => void; onSave: () => void; busy: boolean; error: string }
-const emojis = ['❤️', '😂', '✨', '👀', '🥳', '😭', '🔥', '🥰', '🫶', '👋', '💫', '🌙', '🤍', '🎉', '😊', '💌'];
-export default function ParticleEditor({ previewActive, slides, settings, engine, active, onSelect, onChange, onSettings, onPreview, onSave, busy, error }: Props) {
+interface Props { previewActive: boolean; slides: Slide[]; settings: MessageSettings; engine: ParticleEngine | null; active: number; onSelect: (index: number) => void; onChange: (slides: Slide[]) => void; onPreview: () => void; onSave: () => void; busy: boolean; error: string }
+const emojis = ['❤️', '😂', '✨', '👀', '🥳', '🔥', '😊', '😭', '💀', '🤍', '🫶', '🌙'];
+const pauses = [
+  { key: 'speed', label: 'Pro Zeichen', min: 20, max: 250, step: 5 },
+  { key: 'commaPause', label: 'Komma ,', min: 0, max: 2500, step: 50 },
+  { key: 'periodPause', label: 'Punkt .', min: 0, max: 2500, step: 50 },
+  { key: 'questionPause', label: 'Fragezeichen ?', min: 0, max: 2500, step: 50 },
+  { key: 'exclamationPause', label: 'Ausrufezeichen !', min: 0, max: 2500, step: 50 },
+  { key: 'paragraphPause', label: 'Zeilenumbruch', min: 0, max: 4000, step: 50 },
+] as const;
+export default function ParticleEditor({ previewActive, slides, settings, engine, active, onSelect, onChange, onPreview, onSave, busy, error }: Props) {
   const slide = slides[active];
+  const { writing, effect } = slideSettings(slide, settings);
   const input = useRef<HTMLTextAreaElement>(null);
+  const selection = useRef({ start: 0, end: 0 });
   const [emojiOpen, setEmojiOpen] = useState(false);
   function update(patch: Partial<Slide>) { onChange(slides.map((item, index) => index === active ? { ...item, ...patch } : item)); }
+  function write(patch: Partial<WritingSettings>) { update({ writing: { ...writing, ...patch } }); }
   function move(direction: number) {
     const target = active + direction;
     if (target < 0 || target >= slides.length) return;
@@ -17,39 +28,39 @@ export default function ParticleEditor({ previewActive, slides, settings, engine
     onChange(next); onSelect(target);
   }
   function insertEmoji(emoji: string) {
-    const start = input.current?.selectionStart ?? slide.text.length, end = input.current?.selectionEnd ?? start;
+    const { start, end } = selection.current;
     const text = slide.text.slice(0, start) + emoji + slide.text.slice(end);
     if (Array.from(text).length > MAX_TEXT_LENGTH) return;
-    update({ text });
-    setEmojiOpen(false);
+    update({ text }); setEmojiOpen(false);
     requestAnimationFrame(() => { input.current?.focus(); input.current?.setSelectionRange(start + emoji.length, start + emoji.length); });
   }
-  const preset = Object.entries(WRITING_PRESETS).find(([, p]) => p.speed === settings.writing.speed && p.punctuationPause === settings.writing.punctuationPause && p.paragraphPause === settings.writing.paragraphPause)?.[0] ?? 'Eigene Werte';
+  const preset = Object.entries(WRITING_PRESETS).find(([, p]) => Object.entries(p).every(([key, value]) => writing[key as keyof WritingSettings] === value))?.[0] ?? 'Eigene Werte';
   return <section className="editor" aria-label="Nachrichteneditor" aria-busy={busy}>
-    <div className="editor-heading"><div><p className="eyebrow">DEINE WORTE, DEIN MOMENT.</p><h1 data-particle="hero">Was möchtest du sagen?</h1><p className="editor-subtitle">Ein kleiner Text. Ein großes Gefühl.</p></div><span className="total">{slides.length} / {MAX_SLIDES} Abschnitte</span></div>
-    <div className="editor-grid"><div data-particle="frame" className="editor-panel">
+    <div className="editor-heading"><p data-particle="text" className="eyebrow">VON DIR. FÜR JEMANDEN.</p><h1 data-particle="hero">Was bleibt, sind Worte.</h1></div>
+    <div className="editor-grid"><div className="editor-panel">
+      <div className="section-heading"><span data-particle="text">Deine Abschnitte</span><span data-particle="text">{slides.length} / {MAX_SLIDES}</span></div>
       <nav className="slide-tabs" aria-label="Abschnitte">
-        {slides.map((_, index) => <button data-particle="button" key={index} aria-label={`Abschnitt ${index + 1}`} aria-current={index === active ? 'step' : undefined} onClick={() => onSelect(index)} disabled={busy}>{String(index + 1).padStart(2, '0')}</button>)}
-        <button data-particle="button" className="add-slide" aria-label="Neue Nachricht hinzufügen" title="Neuer Abschnitt" disabled={slides.length >= MAX_SLIDES || busy} onClick={() => { onChange([...slides, { text: '', duration: 2500 }]); onSelect(slides.length); }}>+</button>
+        {slides.map((_, index) => <button data-particle="button" key={index} aria-label={`Abschnitt ${index + 1}`} aria-current={index === active ? 'step' : undefined} onClick={() => { onSelect(index); setEmojiOpen(false); }} disabled={busy}>{String(index + 1).padStart(2, '0')}</button>)}
+        <button data-particle="button" className="add-slide" aria-label="Abschnitt hinzufügen" disabled={slides.length >= MAX_SLIDES || busy} onClick={() => { onChange([...slides, { text: '', duration: 2500 }]); onSelect(slides.length); }}>+</button>
       </nav>
-      <div className="field-meta"><label htmlFor="message-text">ABSCHNITT {String(active + 1).padStart(2, '0')}</label><span>{Array.from(slide.text).length} / {MAX_TEXT_LENGTH}</span></div>
-      <div data-particle="frame" className="text-field"><textarea ref={input} id="message-text" value={slide.text} placeholder="Manchmal braucht es nur ein paar Worte …" aria-describedby="text-help" disabled={busy} onChange={event => update({ text: Array.from(event.target.value).slice(0, MAX_TEXT_LENGTH).join('') })} /></div>
-      <div className="text-toolbar"><div className="emoji-control"><button data-particle="button" aria-expanded={emojiOpen} aria-controls="emoji-picker" onClick={() => setEmojiOpen(!emojiOpen)} disabled={busy}>☺ <span>Emoji</span></button>{emojiOpen && <div data-particle="frame" className="emoji-picker" id="emoji-picker" aria-label="Emoji auswählen" onKeyDown={event => { if (event.key === 'Escape') { setEmojiOpen(false); input.current?.focus(); } }}>{emojis.map(emoji => <button data-particle="control" key={emoji} aria-label={`${emoji} einfügen`} onClick={() => insertEmoji(emoji)}>{emoji}</button>)}</div>}</div><span id="text-help">Bis zu 150 Zeichen</span></div>
-      <div className="editor-options"><label className="duration" htmlFor="hold-duration"><span>Text stehen lassen</span><select data-particle="control" id="hold-duration" value={slide.duration} disabled={busy} onChange={event => update({ duration: Number(event.target.value) })}>{Array.from({ length: (MAX_DURATION - MIN_DURATION) / 500 + 1 }, (_, i) => MIN_DURATION + i * 500).map(duration => <option key={duration} value={duration}>{(duration / 1000).toLocaleString('de-DE')} s</option>)}</select></label>
-        <div className="slide-actions"><button data-particle="button" aria-label="Abschnitt nach vorne" title="Nach vorne" disabled={active === 0 || busy} onClick={() => move(-1)}>←</button><button data-particle="button" aria-label="Abschnitt nach hinten" title="Nach hinten" disabled={active === slides.length - 1 || busy} onClick={() => move(1)}>→</button><button data-particle="button" aria-label="Abschnitt löschen" title="Abschnitt löschen" disabled={slides.length === 1 || busy} onClick={() => { onChange(slides.filter((_, index) => index !== active)); onSelect(Math.max(0, active - 1)); }}>×</button></div>
+      <div className="field-meta"><label data-particle="text" htmlFor="message-text">ABSCHNITT {String(active + 1).padStart(2, '0')}</label><span data-particle="text">{Array.from(slide.text).length} / {MAX_TEXT_LENGTH}</span></div>
+      <div data-particle="frame" className="text-field"><textarea ref={input} onSelect={event => { selection.current = { start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd }; }} onBlur={event => { selection.current = { start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd }; }} id="message-text" value={slide.text} placeholder="Was du schon immer sagen wolltest …" disabled={busy} onChange={event => update({ text: Array.from(event.target.value).slice(0, MAX_TEXT_LENGTH).join('') })} /></div>
+      <div className="text-toolbar"><div className="emoji-control"><button data-particle="button" aria-expanded={emojiOpen} aria-controls="emoji-picker" onClick={() => setEmojiOpen(!emojiOpen)} disabled={busy}>☺ Emoji</button>{emojiOpen && <div data-particle="frame" className="emoji-picker" id="emoji-picker" aria-label="Emoji auswählen" onKeyDown={event => { if (event.key === 'Escape') { setEmojiOpen(false); input.current?.focus(); } }}>{emojis.map(emoji => <button key={emoji} aria-label={`${emoji} einfügen`} onMouseDown={event => event.preventDefault()} onClick={() => insertEmoji(emoji)}>{emoji}</button>)}</div>}</div>
+      <div className="slide-actions"><button data-particle="button" aria-label="Abschnitt nach vorne" disabled={active === 0 || busy} onClick={() => move(-1)}>←</button><button data-particle="button" aria-label="Abschnitt nach hinten" disabled={active === slides.length - 1 || busy} onClick={() => move(1)}>→</button><button data-particle="button" aria-label="Abschnitt löschen" disabled={slides.length === 1 || busy} onClick={() => { onChange(slides.filter((_, index) => index !== active)); onSelect(Math.max(0, active - 1)); }}>×</button></div></div>
+      <div data-particle="line" className="particle-divider" />
+      <div className="settings-group">
+        <label className="control-row"><span data-particle="text">Übergang</span><select data-particle="control" aria-label="Übergang dieses Abschnitts" value={effect} disabled={busy} onChange={event => update({ effect: event.target.value as TransitionEffect })}>{EFFECTS.map(item => <option key={item} value={item}>{EFFECT_LABELS[item]}</option>)}</select></label>
+        <label className="control-row"><span data-particle="text">Fertigen Text halten</span><select data-particle="control" aria-label="Dauer des fertigen Textes" value={slide.duration} disabled={busy} onChange={event => update({ duration: Number(event.target.value) })}>{Array.from({ length: 19 }, (_, i) => 1000 + i * 500).map(duration => <option key={duration} value={duration}>{(duration / 1000).toLocaleString('de-DE')} Sekunden</option>)}</select></label>
+        <label className="control-row"><span data-particle="text">Schreibanimation</span><input data-particle="switch" className="switch" type="checkbox" role="switch" aria-label="Schreibanimation" checked={writing.enabled} disabled={busy} onChange={event => write({ enabled: event.target.checked })} /></label>
+        {writing.enabled && <label className="control-row"><span data-particle="text">Schreibrhythmus</span><select data-particle="control" aria-label="Schreibrhythmus" disabled={busy} value={preset} onChange={event => { const p = WRITING_PRESETS[event.target.value as keyof typeof WRITING_PRESETS]; if (p) write(p); }}><option disabled value="Eigene Werte">Eigene Werte</option>{Object.keys(WRITING_PRESETS).map(name => <option key={name}>{name}</option>)}</select></label>}
       </div>
-      <div className="settings-group"><div data-particle="line" className="particle-divider" /><label className="control-row"><span>Übergang <small>Für die ganze Nachricht</small></span><select data-particle="control" aria-label="Übergang für die ganze Nachricht" value={settings.effect} disabled={busy} onChange={event => onSettings({ ...settings, effect: event.target.value as TransitionEffect })}>{EFFECTS.map(effect => <option key={effect} value={effect}>{EFFECT_LABELS[effect]}</option>)}</select></label>
-      <label className="control-row"><span>Wie geschrieben <small>Buchstabe für Buchstabe</small></span><input data-particle="switch" className="switch" type="checkbox" role="switch" checked={settings.writing.enabled} disabled={busy} onChange={event => onSettings({ ...settings, writing: { ...settings.writing, enabled: event.target.checked } })} /></label>
-      {settings.writing.enabled && <div className="writing-options"><label className="control-row"><span>Schreibrhythmus</span><select data-particle="control" aria-label="Schreibrhythmus" disabled={busy} value={preset} onChange={event => { const p = WRITING_PRESETS[event.target.value as keyof typeof WRITING_PRESETS]; if (p) onSettings({ ...settings, writing: { enabled: true, ...p } }); }}><option disabled value="Eigene Werte">Eigene Werte</option>{Object.keys(WRITING_PRESETS).map(name => <option key={name}>{name}</option>)}</select></label></div>}
-      </div>
-      <details className="advanced"><summary data-particle="button">Feinabstimmung <span>+</span></summary><div className="advanced-content">
-        <label className="control-row"><span>Dieser Abschnitt</span><select data-particle="control" aria-label="Übergang dieses Abschnitts" disabled={busy} value={slide.effect ?? ''} onChange={event => update({ effect: event.target.value ? event.target.value as TransitionEffect : undefined })}><option value="">Wie gesamte Nachricht</option>{EFFECTS.map(effect => <option key={effect} value={effect}>{EFFECT_LABELS[effect]}</option>)}</select></label>
-        {settings.writing.enabled && <>{([{ key: 'speed', label: 'Zeit pro Zeichen', min: 20, max: 250, step: 5 }, { key: 'punctuationPause', label: 'Pause nach Satzzeichen', min: 0, max: 2500, step: 50 }, { key: 'paragraphPause', label: 'Pause nach Absatz', min: 0, max: 4000, step: 50 }] as const).map(item => <label className="range-control" key={item.key}><span>{item.label}<output>{settings.writing[item.key]} ms</output></span><input data-particle="range" type="range" min={item.min} max={item.max} step={item.step} disabled={busy} value={settings.writing[item.key]} onChange={event => onSettings({ ...settings, writing: { ...settings.writing, [item.key]: Number(event.target.value) } })} /></label>)}</>}
-        <label className="control-row"><span>Ein besonderes Finale <small>Letzten Abschnitt langsam formen</small></span><input data-particle="switch" className="switch" type="checkbox" role="switch" disabled={busy} checked={settings.finale} onChange={event => onSettings({ ...settings, finale: event.target.checked })} /></label>
-      </div></details>
-      {error && <p role="alert" className="error-message">{error}</p>}
-      <div className="editor-bottom"><button data-particle="button" className="secondary" onClick={onPreview} disabled={busy}>▷ Gesamtvorschau</button><button data-particle="button" className="primary" onClick={onSave} disabled={busy}>{busy ? 'Wird gespeichert …' : 'Link erstellen ↗'}</button></div>
-      <p className="expiry-note">Dein Link ist 3 Tage gültig. Ohne Passwort zu öffnen.</p>
-    </div><LivePreview active={previewActive} engine={engine} text={slide.text} effect={slide.effect ?? settings.effect} /></div>
+      {writing.enabled && <details className="advanced"><summary data-particle="button">Timing verfeinern +</summary><div className="advanced-content">{pauses.map(item => {
+        const value = writing[item.key] ?? (item.key === 'commaPause' ? writing.punctuationPause * .45 : writing.punctuationPause);
+        return <label className="range-control" key={item.key}><span><span data-particle="text">{item.label}</span><output data-particle="text">{Math.round(value)} ms</output></span><input data-particle="range" aria-label={item.label} type="range" min={item.min} max={item.max} step={item.step} disabled={busy} value={value} onChange={event => write({ [item.key]: Number(event.target.value) })} /></label>;
+      })}</div></details>}
+      {error && <p data-particle="text" role="alert" className="error-message">{error}</p>}
+      <div className="editor-bottom"><button data-particle="button" className="secondary" onClick={onPreview} disabled={busy}>Vorschau</button><button data-particle="button" className="primary" onClick={onSave} disabled={busy}>{busy ? 'Wird gespeichert …' : 'Link erstellen'}</button></div>
+      <p data-particle="text" className="expiry-note">3 Tage gültig. Ohne Passwort zu öffnen.</p>
+    </div><LivePreview active={previewActive} engine={engine} slide={slide} settings={settings} /></div>
   </section>;
 }

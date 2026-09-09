@@ -1,27 +1,37 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ParticleEngine } from '@/particles/ParticleEngine';
-import type { TransitionEffect } from '@/types/message';
-export default function LivePreview({ active, engine, text, effect }: { active: boolean; engine: ParticleEngine | null; text: string; effect: TransitionEffect }) {
+import { slideSettings, type Slide, type MessageSettings } from '@/types/message';
+export default function LivePreview({ active, engine, slide, settings }: { active: boolean; engine: ParticleEngine | null; slide: Slide; settings: MessageSettings }) {
   const bounds = useRef<HTMLDivElement>(null);
+  const [replay, setReplay] = useState(0);
+  const { text, duration } = slide;
+  const { effect, writing } = slideSettings(slide, settings);
   useEffect(() => {
     if (!engine || !active) return;
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
-      engine.disperseText(.8);
       try {
-        await engine.wait(engine.reducedMotion ? 0 : 220, controller.signal);
+        engine.loosenText();
+        await engine.wait(engine.reducedMotion ? 0 : 180, controller.signal);
         const element = bounds.current;
-        if (element) engine.formText(text || 'Deine Worte.', { bounds: () => element.getBoundingClientRect(), effect });
-      } catch { /* The next edit owns the preview. */ }
+        if (!element) return;
+        while (!controller.signal.aborted) {
+          const formation = engine.formText(text || 'Deine Worte.', { bounds: () => element.getBoundingClientRect(), effect, writing });
+          await engine.wait(formation + duration, controller.signal);
+          engine.disperseText(.45);
+          await engine.wait(engine.reducedMotion ? 800 : 1500, controller.signal);
+        }
+      } catch { /* A later edit or scene owns the pool. */ }
     }, 380);
     const observer = new ResizeObserver(() => engine.refresh());
     if (bounds.current) observer.observe(bounds.current);
     return () => { clearTimeout(timer); controller.abort(); observer.disconnect(); };
-  }, [active, engine, text, effect]);
-  return <aside data-particle="frame" className="live-preview" aria-label="Live-Vorschau">
-    <div className="preview-meta"><span><i /> LIVE-VORSCHAU</span><span>Dein Moment nimmt Form an</span></div>
+  }, [active, engine, text, duration, effect, writing, replay]);
+  return <aside className="live-preview" aria-label="Live-Vorschau">
+    <div className="preview-meta"><span data-particle="text">SO KOMMEN DEINE WORTE AN</span><button data-particle="button" aria-label="Abschnitt erneut abspielen" onClick={() => setReplay(n => n + 1)}>↻</button></div>
+    <div data-particle="line" className="particle-divider" />
     <div className="preview-bounds" ref={bounds}><p className={engine ? 'sr-only' : 'live-fallback'}>{text || 'Deine Worte.'}</p></div>
-    <p className="preview-caption">Ein Gedanke. Tausend kleine Punkte.</p>
+    <p data-particle="text" className="preview-caption">Ein Gedanke. Tausend kleine Punkte.</p>
   </aside>;
 }
