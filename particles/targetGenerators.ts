@@ -25,7 +25,7 @@ export interface Target {
   isUI?: boolean;
 }
 
-export function createLineTargets(x1: number, y1: number, x2: number, y2: number, spacing = 7, speed = 12): Target[] {
+export function createLineTargets(x1: number, y1: number, x2: number, y2: number, spacing = 7, speed = 3.6): Target[] {
   const count = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / spacing));
   const length = Math.hypot(x2 - x1, y2 - y1);
   return Array.from({ length: count + 1 }, (_, i) => ({
@@ -47,7 +47,7 @@ export function createLineTargets(x1: number, y1: number, x2: number, y2: number
   }));
 }
 
-export function createRectangleTargets(x: number, y: number, width: number, height: number, spacing = 7, speed = 14): Target[] {
+export function createRectangleTargets(x: number, y: number, width: number, height: number, spacing = 7, speed = 4.2): Target[] {
   const top = createLineTargets(x, y, x + width, y, spacing, speed).slice(0, -1);
   const right = createLineTargets(x + width, y, x + width, y + height, spacing, speed).slice(0, -1);
   const bottom = createLineTargets(x + width, y + height, x, y + height, spacing, speed).slice(0, -1);
@@ -83,7 +83,7 @@ export function createRectangleTargets(x: number, y: number, width: number, heig
   });
 }
 
-export function createButtonTargets(x: number, y: number, width: number, height: number) { return createRectangleTargets(x, y, width, height, 5, 16); }
+export function createButtonTargets(x: number, y: number, width: number, height: number) { return createRectangleTargets(x, y, width, height, 5, 4.8); }
 
 export function createIconTargets(icon: 'plus' | 'close' | 'arrow' | 'heart', x: number, y: number, size = 18): Target[] {
   const half = size / 2;

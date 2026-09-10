@@ -18,6 +18,7 @@ export interface Particle {
   baseTargetX?: number;
   baseTargetY?: number;
   sparkle?: number;
+  impactGlow?: number;
 }
 interface Spark {
   x: number;
@@ -234,15 +235,18 @@ export class ParticleEngine {
       if (unchanged) return;
       p.fromX = p.x; p.fromY = p.y;
       const dx = target.x - p.x, dy = target.y - p.y;
-      const bend = Math.sin(p.phase) * Math.min(25, Math.hypot(dx, dy) * .09);
-      p.controlX = (p.x + target.x) / 2 + bend; p.controlY = (p.y + target.y) / 2 - bend;
+      const dist = Math.hypot(dx, dy);
+      const angle = Math.atan2(dy, dx);
+      const bend = Math.sin(p.phase) * Math.min(65, Math.max(18, dist * 0.25));
+      p.controlX = (p.x + target.x) / 2 - Math.sin(angle) * bend;
+      p.controlY = (p.y + target.y) / 2 + Math.cos(angle) * bend;
       const cx = this.width / 2, cy = this.height / 2;
       if (effect === 'scatter' || effect === 'explosion' || effect === 'outward') { p.controlX += Math.cos(p.phase) * 60; p.controlY += Math.sin(p.phase) * 60; }
       if (effect === 'vortex') { p.controlX = (p.x + target.x) / 2 - (target.y - p.y) * .35; p.controlY = (p.y + target.y) / 2 + (target.x - p.x) * .35; }
       if (effect === 'wave') p.controlY += Math.sin(target.x / this.width * Math.PI * 2) * 45;
       if (effect === 'rain') p.controlY = Math.max(p.y, target.y) + 130;
       if (effect === 'implode') { p.controlX = cx; p.controlY = cy; }
-      p.animationDelay = (target.delay ?? 0) + (effect === 'wave' ? target.x / this.width * 320 : p.animationSeed * 80);
+      p.animationDelay = (target.delay ?? 0) + (effect === 'wave' ? target.x / this.width * 320 : p.animationSeed * 60);
       p.activation = this.time + (this.reducedMotion ? 0 : p.animationDelay);
       p.duration = duration; p.state = p.state === 'FLOATING' ? 'FORMING' : 'MORPHING';
       if (this.reducedMotion || !animate) { p.velocityX = p.velocityY = 0; p.state = 'HOLDING'; p.x = target.x; p.y = target.y; p.opacity = p.targetOpacity; p.size = p.targetSize; p.softness = 0; }
@@ -293,11 +297,20 @@ export class ParticleEngine {
     const radius = Math.max(effectiveSize, .55 / this.dpr);
     this.ctx.moveTo?.(x + radius, y); this.ctx.arc(x, y, radius, 0, Math.PI * 2);
   }
-  private drawDust(p: Particle, opacity = p.opacity) {
+  private drawDust(p: Particle, opacity = p.opacity, warmRatio = p.theme === 'warm' ? 1 : 0) {
     const radius = p.size * (2.1 + (1 - p.depth) * .9);
-    this.ctx.globalAlpha = opacity;
-    const sprite = p.theme === 'warm' ? this.dustSprite : this.dustSpriteCool;
-    this.ctx.drawImage(sprite, p.x - radius, p.y - radius, radius * 2, radius * 2);
+    if (warmRatio <= 0.01) {
+      this.ctx.globalAlpha = opacity;
+      this.ctx.drawImage(this.dustSpriteCool, p.x - radius, p.y - radius, radius * 2, radius * 2);
+    } else if (warmRatio >= 0.99) {
+      this.ctx.globalAlpha = opacity;
+      this.ctx.drawImage(this.dustSprite, p.x - radius, p.y - radius, radius * 2, radius * 2);
+    } else {
+      this.ctx.globalAlpha = opacity * (1 - warmRatio);
+      this.ctx.drawImage(this.dustSpriteCool, p.x - radius, p.y - radius, radius * 2, radius * 2);
+      this.ctx.globalAlpha = opacity * warmRatio;
+      this.ctx.drawImage(this.dustSprite, p.x - radius, p.y - radius, radius * 2, radius * 2);
+    }
   }
 
   disperseParticles(strength = 1) {
@@ -339,7 +352,20 @@ export class ParticleEngine {
       this.textBounds = layout.glyphs.length ? { x: Math.min(...layout.glyphs.map(g => g.x)) - 12, right: Math.max(...layout.glyphs.map(g => g.x + g.width)) + 12, y: Math.min(...layout.glyphs.map(g => g.y)) - layout.fontSize, bottom: Math.max(...layout.glyphs.map(g => g.y)) + layout.fontSize } : null;
       this.presentation = { layout, timeline, start, typing: timeline.length > 0, cursorUntil: start + completion, cursorCount: -1, formation: duration };
       const elapsed = this.time - start;
-      this.textTargets = layout.targets.map(p => ({ ...p, theme: 'warm' as const, delay: Math.max(0, (timeline[p.glyph ?? 0] ?? 0) - elapsed) }));
+      const minX = layout.targets.length ? Math.min(...layout.targets.map(t => t.x)) : 0;
+      const maxX = layout.targets.length ? Math.max(...layout.targets.map(t => t.x)) : 1;
+      const xSpan = Math.max(1, maxX - minX);
+      const isWriting = timeline.length > 0;
+      this.textTargets = layout.targets.map(p => {
+        const waveDelay = isWriting
+          ? (timeline[p.glyph ?? 0] ?? 0)
+          : ((p.x - minX) / xSpan) * 420 + ((p.glyph ?? 0) % 2) * 15;
+        return {
+          ...p,
+          theme: 'warm' as const,
+          delay: Math.max(0, waveDelay - elapsed),
+        };
+      });
       if (timeline.length) {
         const cursor = layout.cursors[0];
         if (cursor) this.textTargets.push(...createLineTargets(cursor.x + 3, cursor.y - layout.fontSize * .4, cursor.x + 3, cursor.y + layout.fontSize * .4, 2.4).map((p, i) => ({ ...p, key: `cursor-${i}`, size: .8, opacity: .8, theme: 'warm' as const })));
@@ -455,11 +481,30 @@ export class ParticleEngine {
         const t = smoothstep(progress);
         const anchorX = (1 - t) ** 2 * p.fromX + 2 * (1 - t) * t * p.controlX + t * t * p.targetX;
         const anchorY = (1 - t) ** 2 * p.fromY + 2 * (1 - t) * t * p.controlY + t * t * p.targetY;
-        p.velocityX = (p.velocityX + (anchorX - p.x) * p.spring * dt) * Math.pow(p.damping, dt);
-        p.velocityY = (p.velocityY + (anchorY - p.y) * p.spring * dt) * Math.pow(p.damping, dt);
-        p.x += p.velocityX * dt; p.y += p.velocityY * dt;
-        p.opacity += (p.targetOpacity - p.opacity) * Math.min(1, .12 * dt);
-        if (progress === 1 && Math.hypot(p.x - p.targetX, p.y - p.targetY) < .3) { p.x = p.targetX; p.y = p.targetY; p.state = 'HOLDING'; p.size = p.targetSize; p.softness = 0; p.opacity = p.targetOpacity; p.velocityX = p.velocityY = 0; }
+        const dx = p.targetX - p.fromX;
+        const dy = p.targetY - p.fromY;
+        const dist = Math.hypot(dx, dy);
+        const swirlEnvelope = Math.sin(t * Math.PI) * Math.pow(1 - t, 0.75);
+        const swirlOffset = Math.sin(t * Math.PI * 2.2 + p.animationSeed * 6.28) * Math.min(45, dist * 0.2) * swirlEnvelope;
+        const nx = dist > 0.001 ? -dy / dist : 0;
+        const ny = dist > 0.001 ? dx / dist : 0;
+        const prevX = p.x, prevY = p.y;
+        p.x = anchorX + nx * swirlOffset;
+        p.y = anchorY + ny * swirlOffset;
+        if (dt > 0.001) {
+          p.velocityX = (p.x - prevX) / dt;
+          p.velocityY = (p.y - prevY) / dt;
+        }
+        p.opacity += (p.targetOpacity - p.opacity) * Math.min(1, .15 * dt);
+        if (progress >= 1) {
+          p.x = p.targetX; p.y = p.targetY;
+          p.state = 'HOLDING';
+          p.size = p.targetSize;
+          p.softness = 0;
+          p.opacity = p.targetOpacity;
+          p.velocityX = p.velocityY = 0;
+          p.impactGlow = this.time + 240;
+        }
       } else {
         const visible = floating++ < ambient;
         const releasing = p.state === 'DISPERSING';
@@ -476,12 +521,25 @@ export class ParticleEngine {
         if (releasing) { dispersing++; if (this.time >= p.release) p.state = 'FLOATING'; }
       }
       if (p.opacity < .008) continue;
+      let warmRatio = p.theme === 'warm' ? 1 : 0;
       if (p.state === 'FORMING' || p.state === 'MORPHING') {
-        p.size += (p.targetSize - p.size) * Math.min(1, .15 * dt);
-        p.softness *= Math.exp(-.09 * dt);
+        const age = this.time - p.activation;
+        const progress = Math.min(1, Math.max(0, age / Math.max(1, p.duration)));
+        const t = smoothstep(progress);
+        warmRatio = p.theme === 'warm' ? t : 0;
+        p.size += (p.targetSize - p.size) * Math.min(1, .18 * dt);
+        p.softness *= Math.exp(-.12 * dt);
       }
-      if (p.softness > .01) this.drawDust(p, p.opacity * p.softness);
+      if (p.softness > .01) this.drawDust(p, p.opacity * p.softness, warmRatio);
       if (p.softness < .99) {
+        if (warmRatio > 0.01) {
+          const r = Math.round(220 + (255 - 220) * warmRatio);
+          const g = Math.round(230 + (226 - 230) * warmRatio);
+          const b = Math.round(242 + (158 - 242) * warmRatio);
+          ctx.fillStyle = `rgb(${r},${g},${b})`;
+        } else {
+          ctx.fillStyle = '#dce6f2';
+        }
         ctx.globalAlpha = p.opacity * (1 - p.softness); ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
       }
     }
@@ -496,7 +554,8 @@ export class ParticleEngine {
         for (const [key, p] of this.assignments) if (key.startsWith('cursor-')) {
           const x = cursor.x + 3, y = cursor.y - layout.fontSize * .4 + i++ * 2.4;
           if (count !== presentation.cursorCount) {
-            p.fromX = p.x; p.fromY = p.y; p.controlX = (p.x + x) / 2; p.controlY = (p.y + y) / 2;
+            p.fromX = p.x; p.fromY = p.y;
+            p.controlX = (p.x + x) / 2; p.controlY = (p.y + y) / 2;
             p.targetX = x; p.targetY = y; p.state = 'MORPHING'; p.activation = this.time; p.duration = 80;
           }
           p.targetOpacity = this.time < cursorUntil && Math.floor((this.time - start) / 480) % 2 === 0 ? .8 : 0;
@@ -543,13 +602,15 @@ export class ParticleEngine {
     for (const alpha of [.125, .25, .375, .5, .625, .75, .875, 1]) {
       ctx.globalAlpha = alpha; ctx.beginPath();
       for (const p of previewHolding) if (Math.round(p.opacity * 8) / 8 === alpha && (!p.glow || p.targetOpacity < 1)) {
-        this.heldDot(p);
+        const impact = p.impactGlow && this.time < p.impactGlow ? 1 + 0.45 * Math.sin((p.impactGlow - this.time) / 240 * Math.PI) : 1;
+        this.heldDot(p, impact);
       }
       ctx.fill();
     }
     ctx.globalAlpha = 1; ctx.beginPath();
-    for (const p of previewHolding) if (p.glow && p.targetOpacity === 1) {
-      this.heldDot(p);
+    for (const p of previewHolding) if ((p.glow && p.targetOpacity === 1) || (p.impactGlow && this.time < p.impactGlow)) {
+      const impact = p.impactGlow && this.time < p.impactGlow ? 1 + 0.45 * Math.sin((p.impactGlow - this.time) / 240 * Math.PI) : 1;
+      this.heldDot(p, impact);
     }
     ctx.shadowColor = '#f5b84c55'; ctx.shadowBlur = 5; ctx.fill();
     ctx.shadowBlur = 0; ctx.fill();

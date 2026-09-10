@@ -57,7 +57,7 @@ export function createTextLayout(text: string, options: TextOptions): TextLayout
       for (let i = 0; i < 10; i++) { const middle = (low + high) / 2; if (arrange(middle)) low = middle; else high = middle; }
       fontSize = Math.floor(low * 4) / 4; arrange(fontSize);
     }
-    const spacing = options.spacing ?? (options.dotMatrix ? Math.max(1.05, Math.min(1.5, fontSize / 13)) : Math.max(1.05, Math.min(2.9, fontSize / 30)));
+    const spacing = options.spacing ?? (options.dotMatrix ? Math.max(1.05, Math.min(1.5, fontSize / 13)) : Math.max(0.75, Math.min(1.4, fontSize / 44)));
     const resolution = 2;
     canvas.width = Math.ceil(width * resolution); canvas.height = Math.ceil(height * resolution);
     ctx.setTransform(resolution, 0, 0, resolution, 0, 0);
@@ -100,7 +100,7 @@ export function createTextLayout(text: string, options: TextOptions): TextLayout
         for (let px = start, col = 0; px < Math.min(width, glyph.x + glyph.width); px += spacing, col++) {
           const offset = Math.min(.35, spacing * .2);
           const alpha = (alphaAt(px - offset, py - offset) + alphaAt(px + offset, py - offset) + alphaAt(px - offset, py + offset) + alphaAt(px + offset, py + offset)) / 4;
-          if (alpha >= .23) targets.push({ x: px, y: py, size: spacing * (options.dotMatrix ? .44 : fontSize < 40 ? .47 : .44), opacity: 1, glow: true, key: `glyph-${glyph.index}-${row}-${col}`, glyph: glyph.index, delay: 0 });
+          if (alpha >= .20) targets.push({ x: px, y: py, size: spacing * (options.dotMatrix ? .44 : .48), opacity: 1, glow: true, key: `glyph-${glyph.index}-${row}-${col}`, glyph: glyph.index, delay: 0 });
         }
       }
     }

@@ -55,6 +55,10 @@ export function sampleUI(root: HTMLElement, viewportHeight: number, departing = 
     const left = parseFloat(style.paddingLeft) || 0, right = parseFloat(style.paddingRight) || 0;
     const top = parseFloat(style.paddingTop) || 0, bottom = parseFloat(style.paddingBottom) || 0;
     const text = (input ? input.type === 'password' ? '•'.repeat(input.value.length) : input.value || input.getAttribute('placeholder') : null) ?? element.dataset.text ?? (kind === 'control' && element instanceof HTMLSelectElement ? element.selectedOptions[0]?.textContent : element.textContent) ?? '';
+    if (kind !== 'hero' && !departing) {
+      exclusions.push(rect);
+      return;
+    }
     const fontSize = parseFloat(style.fontSize);
     const layout = createTextLayout(text, { x: rect.x + left, y: rect.y + top, width: rect.width - left - right, height: rect.height - top - bottom, fontSize, nowrap: kind !== 'hero' && rect.height < fontSize * 2.6, weight: Math.max(500, Number(style.fontWeight) || 500), dotMatrix: kind !== 'hero' && kind !== 'input-text', verticalAlign: input ? 'top' : 'center', align: style.textAlign === 'center' ? 'center' : 'left', fit: true });
     layouts.push(layout);
