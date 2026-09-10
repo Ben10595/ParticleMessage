@@ -96,6 +96,18 @@ test('live preview uses writing, hold duration, and replays from same pool', asy
   expect(await page.locator('canvas').count()).toBe(1);
   expect(Number(await page.locator('canvas').getAttribute('data-ui-target-count'))).toBeGreaterThan(1000);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  if (testInfo.project.name === 'desktop') {
+    const brightestCores = await page.locator('.editor-heading h1, .section-heading > span:first-child').evaluateAll(elements => elements.map(element => {
+      const rect = element.getBoundingClientRect();
+      const canvas = document.querySelector('canvas')!;
+      const dpr = canvas.width / innerWidth;
+      const pixels = canvas.getContext('2d')!.getImageData(Math.round(rect.x * dpr), Math.round(rect.y * dpr), Math.round(rect.width * dpr), Math.round(rect.height * dpr)).data;
+      let brightest = 0;
+      for (let i = 0; i < pixels.length; i += 4) brightest = Math.max(brightest, pixels[i]);
+      return brightest;
+    }));
+    for (const core of brightestCores) expect(core).toBeGreaterThanOrEqual(240);
+  }
   await page.screenshot({ path: `test-results/editor-${testInfo.project.name}.png` });
   await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'dispersing', { timeout: 8000 });
 });

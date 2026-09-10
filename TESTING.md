@@ -25,3 +25,11 @@ Der einzelne Testdatensatz bleibt in der bestehenden Tabelle und unterliegt der 
 Passwortseite, große Partikelschrift, offene Editorstruktur, kleine Beschriftungen, mobile Umbrüche, öffentliche Nachricht, Branding und Wiederholung wurden visuell geprüft. Zu enge Umbrüche kleiner Labels wurden korrigiert. Kleine Texte werden dichter gesampelt; Eingabetexte bleiben zur Bedienbarkeit nativ.
 
 Desktop und iPhone-13-Emulation zeigten in einer lokalen Stichprobe jeweils 60 FPS (rund 18.300 bzw. 9.800 Partikel). Das ist keine Garantie für alle Geräte. Der Editor braucht wegen der vollständig aus Punkten dargestellten Beschriftungen mehr Partikel als die Grundbudgets von 1.400/3.000; bei Last werden zuerst freie Hintergrundpunkte reduziert. Physische Smartphones und ihre Bildschirmtastaturen wurden nicht getestet. Kein Deployment wurde vorgenommen.
+
+## Cozy-Partikelüberarbeitung
+
+Die bestehende Engine nutzt jetzt ein deterministisches Perlin-Noise-Feld, weiches Anziehen/Loslassen mit erhaltenem Impuls, wiederverwendete Partikel und warme, zwischengespeicherte Staub-Sprites. Eingerastete Schriftpunkte haben Opazität 1, einen scharfen Kern und einen gemeinsam gezeichneten, dezenten Glow. Kleine ruhende Kerne werden für klare Kontraste an Bildschirmpixeln ausgerichtet. Schrift-Sampling ist dichter; Hintergrundpartikel werden bei Überbelegung weich ausgeblendet, bevor sie aus dem Pool entfernt werden.
+
+TypeScript, Lint, Build und 20 Unit-Tests bestanden. Neue Prüfungen decken die Stetigkeit des Noise-Felds, Impulserhaltung beim Loslassen, Rückkehr zu weichem Ambient Floating und vollständig opake Schriftkerne ab. Alle 28 Desktop-/Mobile-Browsertests bestanden; nach der abschließenden Schärfekorrektur werden acht betroffene Vorschau-/Resize-Tests erneut geprüft. Der Desktop-Test prüft zusätzlich helle Schriftkern-Pixel direkt im Canvas.
+
+Visuelle Prüfung: Editor, öffentliche Nachricht und mobile Darstellung. Lokale FPS-Stichprobe während paralleler Browsertests: Desktop 46/60/60, iPhone-13-Emulation 60/60/60. Keine Messung auf physischen Smartphones, keine Garantie für jedes Gerät. Supabase-Antworten simuliert; kein Deployment.

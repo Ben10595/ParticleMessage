@@ -3,9 +3,11 @@ import { createLineTargets, type Target } from './targetGenerators';
 import { EFFECTS, type TransitionEffect, type WritingSettings } from '../types/message';
 import { graphemes, typingTimeline } from '../lib/playback';
 import { sampleUI } from './uiSampler';
+import { perlin2, smoothstep } from './noise';
 export type ParticleState = 'FLOATING' | 'FORMING' | 'HOLDING' | 'MORPHING' | 'DISPERSING';
 export interface Particle {
   x: number; y: number; targetX: number; targetY: number; velocityX: number; velocityY: number;
+  softness: number; ambientSize: number; ambientOpacity: number; releaseStrength: number; glow: boolean; damping: number;
   depth: number; animationDelay: number; animationSeed: number;
   size: number; opacity: number; idleOffset: number; phase: number; speed: number; spring: number;
   state: ParticleState; activation: number; release: number; targetOpacity: number; targetSize: number;
@@ -17,6 +19,8 @@ export class ParticleEngine {
   readonly particles: Particle[] = [];
   width = 0; height = 0; time = 0; reducedMotion = false;
   private ctx: CanvasRenderingContext2D;
+  private dustSprite: HTMLCanvasElement;
+  private dpr = 1;
   private frame = 0; private lastFrame = 0; private disposed = false;
   private pointer = { x: -1000, y: -1000 };
   private scene: (() => void) | null = null;
@@ -37,7 +41,7 @@ export class ParticleEngine {
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) throw new Error('Canvas wird von deinem Browser nicht unterstützt.');
-    this.ctx = ctx; this.reducedMotion = this.motion.matches; this.resize();
+    this.ctx = ctx; this.dustSprite = this.createDustSprite(); this.reducedMotion = this.motion.matches; this.resize();
     window.addEventListener('resize', this.resize);
     window.addEventListener('scroll', this.refresh, { passive: true });
     window.addEventListener('pointermove', this.move, { passive: true });
@@ -50,12 +54,23 @@ export class ParticleEngine {
   private visibility = () => { this.lastFrame = 0; };
   private move = (event: PointerEvent) => { this.pointer.x = event.clientX; this.pointer.y = event.clientY; };
   private leave = () => { this.pointer.x = -1000; this.pointer.y = -1000; };
+  private createDustSprite() {
+    const sprite = document.createElement('canvas'); sprite.width = sprite.height = 32;
+    const ctx = sprite.getContext('2d')!;
+    const halo = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+    halo.addColorStop(0, '#fff3d9'); halo.addColorStop(.22, '#ffeac8');
+    halo.addColorStop(.46, '#f2cf9348'); halo.addColorStop(1, '#d9a65c00');
+    ctx.fillStyle = halo; ctx.fillRect(0, 0, 32, 32);
+    return sprite;
+  }
   private makeParticle(): Particle {
     const x = Math.random() * this.width, y = Math.random() * this.height;
-    return { x, y, homeX: x, homeY: y, targetX: 0, targetY: 0, velocityX: 0, velocityY: 0,
-      depth: .3 + Math.random() * .7, animationDelay: 0, animationSeed: Math.random(),
-      size: .55 + Math.random() * .55, opacity: .08, idleOffset: Math.random() * Math.PI * 2,
-      phase: Math.random() * 10, speed: .4 + Math.random() * .6, spring: .03,
+    const depth = .3 + Math.random() * .7;
+    const ambientSize = .5 + depth * .85;
+    return { softness: 1, ambientSize, ambientOpacity: .3 + depth * .3, releaseStrength: 0, glow: false, damping: .54, x, y, homeX: x, homeY: y, targetX: 0, targetY: 0, velocityX: 0, velocityY: 0,
+      depth, animationDelay: 0, animationSeed: Math.random(),
+      size: ambientSize, opacity: .08, idleOffset: Math.random() * Math.PI * 2,
+      phase: Math.random() * 10, speed: .4 + Math.random() * .6, spring: .16,
       state: 'FLOATING', activation: 0, release: 0, targetOpacity: 1, targetSize: 1,
       fromX: x, fromY: y, controlX: x, controlY: y, duration: 1000 };
   }
@@ -63,7 +78,7 @@ export class ParticleEngine {
   private ambientCount() { return Math.max(Math.round((this.width < 700 ? 500 : 900) * this.performanceScale), this.desiredCount() - this.assignments.size); }
   private resize = () => {
     this.width = window.innerWidth; this.height = window.innerHeight;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.canvas.width = Math.round(this.width * dpr); this.canvas.height = Math.round(this.height * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     while (this.particles.length < this.desiredCount()) this.particles.push(this.makeParticle());
@@ -137,7 +152,7 @@ export class ParticleEngine {
         available.delete(p); next.set(key, p);
       }
       const unchanged = p.targetX === target.x && p.targetY === target.y && (p.state === 'HOLDING' || p.state === 'FORMING' || p.state === 'MORPHING');
-      p.targetX = target.x; p.targetY = target.y; p.targetOpacity = target.opacity ?? 1; p.targetSize = target.size ?? 1;
+      p.targetX = target.x; p.targetY = target.y; p.targetOpacity = target.opacity ?? 1; p.glow = target.glow ?? false; p.targetSize = target.size ?? 1;
       if (unchanged) return;
       p.fromX = p.x; p.fromY = p.y;
       const dx = target.x - p.x, dy = target.y - p.y;
@@ -151,8 +166,8 @@ export class ParticleEngine {
       if (effect === 'implode') { p.controlX = cx; p.controlY = cy; }
       p.animationDelay = (target.delay ?? 0) + (effect === 'wave' ? target.x / this.width * 320 : p.animationSeed * 80);
       p.activation = this.time + (this.reducedMotion ? 0 : p.animationDelay);
-      p.duration = duration; p.state = p.state === 'FLOATING' ? 'FORMING' : 'MORPHING'; p.velocityX = 0; p.velocityY = 0;
-      if (this.reducedMotion || !animate) { p.state = 'HOLDING'; p.x = target.x; p.y = target.y; p.opacity = p.targetOpacity; p.size = p.targetSize; }
+      p.duration = duration; p.state = p.state === 'FLOATING' ? 'FORMING' : 'MORPHING';
+      if (this.reducedMotion || !animate) { p.velocityX = p.velocityY = 0; p.state = 'HOLDING'; p.x = target.x; p.y = target.y; p.opacity = p.targetOpacity; p.size = p.targetSize; p.softness = 0; }
     });
     available.forEach(p => { if (p.state === 'FORMING' || p.state === 'MORPHING' || p.state === 'HOLDING') this.releaseParticle(p); });
     this.assignments = next;
@@ -161,12 +176,46 @@ export class ParticleEngine {
     this.canvas.dataset.phase = this.reducedMotion ? 'holding' : 'forming';
   }
   private releaseParticle(p: Particle, strength = 1) {
-    p.state = 'DISPERSING'; p.release = this.time + 1400;
-    p.homeX = Math.random() * this.width; p.homeY = Math.random() * this.height;
-    p.velocityX = Math.cos(p.phase) * (1.5 + p.speed) * strength;
-    p.velocityY = Math.sin(p.phase) * (1.5 + p.speed) * strength;
-    if (this.reducedMotion) { p.state = 'FLOATING'; p.opacity = 0; }
+    p.state = 'DISPERSING'; p.release = this.time + 1400; p.releaseStrength = strength;
+    // Preserve position AND momentum: release gradually joins the same noise field.
+    if (this.reducedMotion) { p.state = 'FLOATING'; p.opacity = 0; p.velocityX = p.velocityY = 0; }
   }
+  private drift(p: Particle, dt: number, release = 0) {
+    if (this.reducedMotion) return;
+    const time = this.time * .000018;
+    const nx = p.x * .0025 + p.phase, ny = p.y * .0025;
+    const speed = .12 + p.depth * .2;
+    let vx = perlin2(nx + time, ny + 17.3) * speed * 2;
+    let vy = perlin2(nx + 91.7, ny - time) * speed * 2;
+    vx += Math.cos(p.phase * 7) * release * p.releaseStrength * .65;
+    vy += Math.sin(p.phase * 7) * release * p.releaseStrength * .65;
+    // Gentle boundary steering instead of wrapping or respawning on screen.
+    vx += (Math.max(0, 60 - p.x) - Math.max(0, p.x - this.width + 60)) * .004;
+    vy += (Math.max(0, 60 - p.y) - Math.max(0, p.y - this.height + 60)) * .004;
+    const dx = p.x - this.pointer.x, dy = p.y - this.pointer.y, distance = Math.hypot(dx, dy);
+    if (distance > 1 && distance < 90) {
+      const force = (1 - distance / 90) ** 2 * .18;
+      vx += dx / distance * force; vy += dy / distance * force;
+    }
+    const ease = 1 - Math.exp(-.045 * dt);
+    p.velocityX += (vx - p.velocityX) * ease; p.velocityY += (vy - p.velocityY) * ease;
+    p.x += p.velocityX * dt; p.y += p.velocityY * dt;
+  }
+  private heldDot(p: Particle) {
+    // Subpixel-sized dots on pixel intersections otherwise become four grey pixels.
+    // Align only settled cores; flying dust keeps continuous, unsnapped positions.
+    const x = p.size < 1 ? (Math.round(p.x * this.dpr - .5) + .5) / this.dpr : p.x;
+    const y = p.size < 1 ? (Math.round(p.y * this.dpr - .5) + .5) / this.dpr : p.y;
+    // Chromium can cull tiny batched circles; keep a visible core at every DPR.
+    const radius = Math.max(p.size, .55 / this.dpr);
+    this.ctx.moveTo?.(x + radius, y); this.ctx.arc(x, y, radius, 0, Math.PI * 2);
+  }
+  private drawDust(p: Particle, opacity = p.opacity) {
+    const radius = p.size * (2.1 + (1 - p.depth) * .9);
+    this.ctx.globalAlpha = opacity;
+    this.ctx.drawImage(this.dustSprite, p.x - radius, p.y - radius, radius * 2, radius * 2);
+  }
+
   disperseParticles(strength = 1) {
     this.scene = null; this.presentation = null; this.textBounds = null; this.uiLayouts = []; this.uiTargets = []; this.textTargets = []; this.uiRoot = null; this.exclusions = []; this.assignments.clear();
     this.canvas.dataset.phase = 'dispersing';
@@ -264,14 +313,14 @@ export class ParticleEngine {
       let free = 0, retained = 0;
       const budget = this.ambientCount();
       for (const particle of this.particles) {
-        if (particle.state !== 'FLOATING' || free++ < budget) this.particles[retained++] = particle;
+        if (particle.state !== 'FLOATING' || free++ < budget || particle.opacity >= .008) this.particles[retained++] = particle;
       }
       this.particles.length = retained;
       this.canvas.dataset.particleCount = String(this.particles.length);
       this.frameCount = 0; this.slowFrames = 0;
     }
     for (const waiter of this.waiters) if (this.time >= waiter.end) { this.waiters.delete(waiter); waiter.finish(); }
-    const ctx = this.ctx; ctx.globalAlpha = 1; ctx.fillStyle = '#050608'; ctx.fillRect(0, 0, this.width, this.height); ctx.fillStyle = '#eef7fc';
+    const ctx = this.ctx; ctx.globalAlpha = 1; ctx.fillStyle = '#070605'; ctx.fillRect(0, 0, this.width, this.height); ctx.fillStyle = '#fff4df';
     let forming = 0, dispersing = 0, floating = 0;
     const ambient = this.ambientCount();
     for (const p of this.particles) {
@@ -283,41 +332,49 @@ export class ParticleEngine {
       }
       if (p.state === 'FORMING' || p.state === 'MORPHING') {
         const age = this.time - p.activation;
-        if (age < 0) { p.opacity += (.1 - p.opacity) * .05; ctx.globalAlpha = p.opacity; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill(); continue; }
+        if (age < 0) {
+          this.drift(p, dt); p.opacity += (.16 - p.opacity) * (1 - Math.exp(-.04 * dt));
+          // The flight begins where the still-floating point is when its turn arrives.
+          p.controlX += (p.x - p.fromX) / 2; p.controlY += (p.y - p.fromY) / 2;
+          p.fromX = p.x; p.fromY = p.y;
+          this.drawDust(p); continue;
+        }
         forming++;
         const progress = Math.min(1, age / Math.max(1, p.duration));
-        const t = progress * progress * progress * (progress * (progress * 6 - 15) + 10);
+        const t = smoothstep(progress);
         const anchorX = (1 - t) ** 2 * p.fromX + 2 * (1 - t) * t * p.controlX + t * t * p.targetX;
         const anchorY = (1 - t) ** 2 * p.fromY + 2 * (1 - t) * t * p.controlY + t * t * p.targetY;
-        p.velocityX = (p.velocityX + (anchorX - p.x) * .16 * dt) * Math.pow(.54, dt);
-        p.velocityY = (p.velocityY + (anchorY - p.y) * .16 * dt) * Math.pow(.54, dt);
+        p.velocityX = (p.velocityX + (anchorX - p.x) * p.spring * dt) * Math.pow(p.damping, dt);
+        p.velocityY = (p.velocityY + (anchorY - p.y) * p.spring * dt) * Math.pow(p.damping, dt);
         p.x += p.velocityX * dt; p.y += p.velocityY * dt;
         p.opacity += (p.targetOpacity - p.opacity) * Math.min(1, .12 * dt);
-        if (progress === 1 && Math.hypot(p.x - p.targetX, p.y - p.targetY) < .3) { p.x = p.targetX; p.y = p.targetY; p.state = 'HOLDING'; p.size = p.targetSize; }
+        if (progress === 1 && Math.hypot(p.x - p.targetX, p.y - p.targetY) < .3) { p.x = p.targetX; p.y = p.targetY; p.state = 'HOLDING'; p.size = p.targetSize; p.softness = 0; p.opacity = p.targetOpacity; p.velocityX = p.velocityY = 0; }
       } else {
-        if (p.state === 'FLOATING' && floating++ >= ambient) { p.opacity = 0; continue; }
-        if (!this.reducedMotion) {
-          if (p.state === 'FLOATING') {
-            const driftX = p.homeX + Math.sin(this.time * .00012 * p.speed + p.phase) * 115 * p.depth;
-            const driftY = p.homeY + Math.cos(this.time * .00010 * p.speed + p.phase) * 90 * p.depth;
-            p.velocityX += (driftX - p.x) * .0015 * dt; p.velocityY += (driftY - p.y) * .0015 * dt;
-            const dx = p.x - this.pointer.x, dy = p.y - this.pointer.y, dist = Math.hypot(dx, dy);
-            if (dist < 95 && dist > 1) { const force = (1 - dist / 95) * .28; p.velocityX += dx / dist * force; p.velocityY += dy / dist * force; }
-          }
-          p.velocityX *= Math.pow(.96, dt); p.velocityY *= Math.pow(.96, dt);
-          p.x += p.velocityX * dt; p.y += p.velocityY * dt;
-        }
-        if (p.state === 'DISPERSING') { dispersing++; p.opacity *= Math.pow(.96, dt); if (this.time >= p.release) { p.state = 'FLOATING'; } }
-        else {
-          // Keep the central reading area free from distracting ambient points.
-          const inText = this.textBounds && p.x > this.textBounds.x && p.x < this.textBounds.right && p.y > this.textBounds.y && p.y < this.textBounds.bottom;
-          const behindUI = this.exclusions.some(rect => p.x > rect.x - 8 && p.x < rect.right + 8 && p.y > rect.y - 7 && p.y < rect.bottom + 7);
-          p.opacity += ((inText || behindUI ? .012 : .13 + p.speed * .18) - p.opacity) * .06 * dt;
-        }
+        const visible = floating++ < ambient;
+        const releasing = p.state === 'DISPERSING';
+        if (!visible && !releasing && p.opacity < .008) continue;
+        const progress = releasing ? smoothstep(Math.min(1, 1 - (p.release - this.time) / 1400)) : 1;
+        this.drift(p, dt, releasing ? 1 - progress : 0);
+        const inText = this.textBounds && p.x > this.textBounds.x && p.x < this.textBounds.right && p.y > this.textBounds.y && p.y < this.textBounds.bottom;
+        const behindUI = this.exclusions.some(rect => p.x > rect.x - 8 && p.x < rect.right + 8 && p.y > rect.y - 7 && p.y < rect.bottom + 7);
+        const opacity = visible ? (inText || behindUI ? .025 : p.ambientOpacity) : 0;
+        const ease = 1 - Math.exp(-.05 * dt);
+        p.opacity += (opacity - p.opacity) * ease;
+        p.size += (p.ambientSize - p.size) * ease;
+        p.softness += (1 - p.softness) * ease;
+        if (releasing) { dispersing++; if (this.time >= p.release) p.state = 'FLOATING'; }
       }
       if (p.opacity < .008) continue;
-      ctx.globalAlpha = p.opacity; ctx.beginPath(); ctx.arc(p.x, p.y, p.state === 'FORMING' || p.state === 'MORPHING' ? p.targetSize : p.size, 0, Math.PI * 2); ctx.fill();
+      if (p.state === 'FORMING' || p.state === 'MORPHING') {
+        p.size += (p.targetSize - p.size) * Math.min(1, .15 * dt);
+        p.softness *= Math.exp(-.09 * dt);
+      }
+      if (p.softness > .01) this.drawDust(p, p.opacity * p.softness);
+      if (p.softness < .99) {
+        ctx.globalAlpha = p.opacity * (1 - p.softness); ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+      }
     }
+
     if (this.presentation?.typing) {
       const presentation = this.presentation;
       const { layout, timeline, start, cursorUntil } = presentation;
@@ -339,11 +396,19 @@ export class ParticleEngine {
     // A handful of draw calls keeps dense glyphs bright and frames translucent.
     for (const alpha of [.125, .25, .375, .5, .625, .75, .875, 1]) {
       ctx.globalAlpha = alpha; ctx.beginPath();
-      for (const p of this.assignments.values()) if (p.state === 'HOLDING' && Math.round(p.opacity * 8) / 8 === alpha) {
-        ctx.moveTo?.(p.x + p.size, p.y); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      for (const p of this.assignments.values()) if (p.state === 'HOLDING' && Math.round(p.opacity * 8) / 8 === alpha && (!p.glow || p.targetOpacity < 1)) {
+        this.heldDot(p);
       }
       ctx.fill();
     }
+    // A single batched bloom pass; sharp letter cores are drawn again without blur.
+    // No per-particle shadowBlur, and no blur on the canvas or accessible DOM.
+    ctx.globalAlpha = 1; ctx.beginPath();
+    for (const p of this.assignments.values()) if (p.state === 'HOLDING' && p.glow && p.targetOpacity === 1) {
+      this.heldDot(p);
+    }
+    ctx.shadowColor = '#f2c07838'; ctx.shadowBlur = 4; ctx.fill();
+    ctx.shadowBlur = 0; ctx.fill();
     if (this.presentation) {
       const { layout, timeline, start, typing } = this.presentation;
       const count = typing ? timeline.filter(t => t <= this.time - start).length : layout.count;

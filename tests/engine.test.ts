@@ -9,11 +9,12 @@ test('reuses particles across keyed UI updates, handles reduced motion and clear
   let nextFrame: FrameRequestCallback | undefined;
   let cancelled = false;
   mock('window', { innerWidth: 900, innerHeight: 700, devicePixelRatio: 3, addEventListener: (name: string) => listeners.add(name), removeEventListener: (name: string) => listeners.delete(name) });
-  mock('document', { hidden: false, addEventListener: (name: string) => listeners.add(name), removeEventListener: (name: string) => listeners.delete(name) });
+  const spriteContext = { createRadialGradient: () => ({ addColorStop() {} }), fillRect() {} };
+  mock('document', { createElement: () => ({ getContext: () => spriteContext }), hidden: false, addEventListener: (name: string) => listeners.add(name), removeEventListener: (name: string) => listeners.delete(name) });
   mock('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
   mock('requestAnimationFrame', (callback: FrameRequestCallback) => { nextFrame = callback; return 1; });
   mock('cancelAnimationFrame', () => { cancelled = true; });
-  const context = { setTransform() {}, fillRect() {}, beginPath() {}, arc() {}, fill() {} };
+  const context = { drawImage() {}, setTransform() {}, fillRect() {}, beginPath() {}, arc() {}, fill() {} };
   const canvas = { width: 0, height: 0, dataset: {}, getContext: () => context } as unknown as HTMLCanvasElement;
   let engine: ParticleEngine | undefined;
   try {
@@ -49,11 +50,12 @@ test('morphs from current positions, settles exactly, protects glyphs from point
   let frame: FrameRequestCallback = () => {};
   const events = new Map<string, (event: unknown) => void>();
   mock('window', { innerWidth: 900, innerHeight: 700, devicePixelRatio: 1, addEventListener: (name: string, fn: (event: unknown) => void) => events.set(name, fn), removeEventListener() {} });
-  mock('document', { hidden: false, addEventListener() {}, removeEventListener() {} });
+  const spriteContext = { createRadialGradient: () => ({ addColorStop() {} }), fillRect() {} };
+  mock('document', { createElement: () => ({ getContext: () => spriteContext }), hidden: false, addEventListener() {}, removeEventListener() {} });
   mock('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
   mock('requestAnimationFrame', (fn: FrameRequestCallback) => { frame = fn; return 1; });
   mock('cancelAnimationFrame', () => {});
-  const context = { setTransform() {}, fillRect() {}, beginPath() {}, moveTo() {}, arc() {}, fill() {} };
+  const context = { drawImage() {}, setTransform() {}, fillRect() {}, beginPath() {}, moveTo() {}, arc() {}, fill() {} };
   const canvas = { dataset: {}, getContext: () => context } as unknown as HTMLCanvasElement;
   let engine: ParticleEngine | undefined;
   try {
@@ -73,9 +75,23 @@ test('morphs from current positions, settles exactly, protects glyphs from point
     assert.equal(particle.y, 350);
     engine.setParticleTargets([{ key: 'letter', x: 650, y: 350 }, { key: 'ui-frame', x: 20, y: 20 }], false);
     const frameParticle = engine.particles.find(p => p.targetX === 20 && p.targetY === 20)!;
+    const beforeRelease = { x: particle.x, y: particle.y, vx: particle.velocityX, vy: particle.velocityY };
     engine.disperseText();
+    assert.deepEqual({ x: particle.x, y: particle.y, vx: particle.velocityX, vy: particle.velocityY }, beforeRelease, 'release preserves position and momentum');
     assert.equal(frameParticle.state, 'HOLDING', 'editor frame survives a preview edit');
     assert.equal(particle.state, 'DISPERSING', 'only the preview text dissolves');
+    for (let t = 1900; t < 3700; t += 16.67) frame(t);
+    assert.equal(particle.state, 'FLOATING');
+    assert.ok(particle.opacity > .1 && particle.opacity <= .6, 'released point returns to visible ambient dust');
+    assert.ok(particle.softness > .95, 'released point becomes soft');
+    assert.ok(Math.hypot(particle.x - 650, particle.y - 350) < 100, 'release stays gentle');
+    engine.setParticleTargets([{ key: 'glyph-0-test', x: 350, y: 260, glow: true, opacity: 1 }]);
+    const formed = engine.particles.find(p => p.targetX === 350 && p.targetY === 260)!;
+    for (let t = 3700; t < 5600; t += 16.67) frame(t);
+    assert.equal(formed.state, 'HOLDING'); assert.equal(formed.opacity, 1); assert.equal(formed.softness, 0);
+    const count = engine.particles.length;
+    engine.setParticleTargets([{ key: 'glyph-0-test', x: 351, y: 260, glow: true, opacity: 1 }]);
+    assert.equal(engine.particles.length, count, 'the existing swarm supplies the next form');
     const pending = engine.wait(10000);
     engine.destroy();
     await assert.rejects(pending, { name: 'AbortError' });

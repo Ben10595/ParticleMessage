@@ -58,7 +58,7 @@ export function sampleUI(root: HTMLElement, viewportHeight: number, departing = 
     const fontSize = parseFloat(style.fontSize);
     const layout = createTextLayout(text, { x: rect.x + left, y: rect.y + top, width: rect.width - left - right, height: rect.height - top - bottom, fontSize, nowrap: kind !== 'hero' && rect.height < fontSize * 2.6, weight: Math.max(500, Number(style.fontWeight) || 500), dotMatrix: kind !== 'hero' && kind !== 'input-text', verticalAlign: input ? 'top' : 'center', align: style.textAlign === 'center' ? 'center' : 'left', fit: true });
     layouts.push(layout);
-    targets.push(...layout.targets.map(p => ({ ...p, key: `${key}-${p.key}`, size: p.size, opacity: disabled ? .28 : kind === 'hero' || kind === 'button' || active ? 1 : .92, delay: Number(element.dataset.particleDelay ?? 0) + (p.glyph ?? 0) * (kind === 'hero' ? 15 : 3) })));
+    targets.push(...layout.targets.map(p => ({ ...p, key: `${key}-${p.key}`, size: p.size, opacity: disabled ? .28 : 1, delay: Number(element.dataset.particleDelay ?? 0) + (p.glyph ?? 0) * (kind === 'hero' ? 15 : 3) })));
     exclusions.push(rect);
   });
   root.querySelectorAll<HTMLElement>('input,textarea,small,.eyebrow,.field-meta,.expiry-note,.preview-meta,footer').forEach(element => {
