@@ -1,7 +1,7 @@
 import { createTextLayout, type TextLayout } from './textSampler';
 import { createLineTargets, type Target } from './targetGenerators';
 import { EFFECTS, type TransitionEffect, type WritingSettings } from '../types/message';
-import { typingTimeline } from '../lib/playback';
+import { graphemes, typingTimeline } from '../lib/playback';
 import { sampleUI } from './uiSampler';
 export type ParticleState = 'FLOATING' | 'FORMING' | 'HOLDING' | 'MORPHING' | 'DISPERSING';
 export interface Particle {
@@ -11,7 +11,7 @@ export interface Particle {
   state: ParticleState; activation: number; release: number; targetOpacity: number; targetSize: number;
   fromX: number; fromY: number; controlX: number; controlY: number; duration: number; homeX: number; homeY: number;
 }
-interface Presentation { layout: TextLayout; timeline: number[]; start: number; typing: boolean; cursorUntil: number; cursorCount: number }
+interface Presentation { layout: TextLayout; timeline: number[]; start: number; typing: boolean; cursorUntil: number; cursorCount: number; formation: number }
 export interface FormOptions { bounds?: () => DOMRect; writing?: WritingSettings; effect?: TransitionEffect; finale?: boolean }
 export class ParticleEngine {
   readonly particles: Particle[] = [];
@@ -78,9 +78,9 @@ export class ParticleEngine {
       else this.setParticleTargets(this.uiTargets, false);
     });
   };
-  private captureUI() {
+  private captureUI(departing = false) {
     if (!this.uiRoot) return;
-    const sample = sampleUI(this.uiRoot, this.height);
+    const sample = sampleUI(this.uiRoot, this.height, departing);
     this.uiTargets = sample.targets; this.uiLayouts = sample.layouts; this.exclusions = sample.exclusions;
   }
   private mergeTargets(animate = true, effect: TransitionEffect = 'morph', duration = 1150) {
@@ -95,7 +95,7 @@ export class ParticleEngine {
     const next = new Map<string, Particle>();
     for (let i = 0; i < targets.length; i++) {
       const key = targets[i].key ?? `point-${i}`, existing = this.assignments.get(key);
-      if (existing && available.delete(existing)) next.set(key, existing);
+      if (existing && (!key.startsWith('glyph-') || Math.hypot(existing.targetX - targets[i].x, existing.targetY - targets[i].y) < 96) && available.delete(existing)) next.set(key, existing);
     }
     // Separate occupied and free spatial buckets. Remove each selected point from
     // its bucket immediately, so dense mobile glyphs never rescan claimed points.
@@ -152,7 +152,7 @@ export class ParticleEngine {
       p.animationDelay = (target.delay ?? 0) + (effect === 'wave' ? target.x / this.width * 320 : p.animationSeed * 80);
       p.activation = this.time + (this.reducedMotion ? 0 : p.animationDelay);
       p.duration = duration; p.state = p.state === 'FLOATING' ? 'FORMING' : 'MORPHING'; p.velocityX = 0; p.velocityY = 0;
-      if (this.reducedMotion || !animate) { p.state = 'HOLDING'; p.x = target.x; p.y = target.y; p.opacity = p.targetOpacity; }
+      if (this.reducedMotion || !animate) { p.state = 'HOLDING'; p.x = target.x; p.y = target.y; p.opacity = p.targetOpacity; p.size = p.targetSize; }
     });
     available.forEach(p => { if (p.state === 'FORMING' || p.state === 'MORPHING' || p.state === 'HOLDING') this.releaseParticle(p); });
     this.assignments = next;
@@ -179,7 +179,7 @@ export class ParticleEngine {
   }
   // Preserve assignments through the signature edit effect; the next text reclaims them.
   loosenText() {
-    this.scene = null; this.presentation = null;
+    this.scene = null; this.presentation = null; this.textTargets = [];
     for (const [key, p] of this.assignments) if (!key.startsWith('ui-')) this.releaseParticle(p, .3);
   }
   morphParticles(targets: Target[], effect: TransitionEffect = 'morph') { this.setParticleTargets(targets, true, effect); }
@@ -187,7 +187,11 @@ export class ParticleEngine {
     const opts = typeof options === 'boolean' ? {} : options;
     const start = this.time;
     if (text !== this.lastText) {
-      for (const key of this.assignments.keys()) if (key.startsWith('glyph-')) this.assignments.delete(key);
+      const previous = graphemes(this.lastText), incoming = graphemes(text);
+      for (const key of this.assignments.keys()) if (key.startsWith('glyph-')) {
+        const index = Number(key.split('-')[1]);
+        if (previous[index] !== incoming[index]) this.assignments.delete(key);
+      }
       this.lastText = text;
     }
     const timeline = opts.writing?.enabled && !this.reducedMotion ? typingTimeline(text, opts.writing) : [];
@@ -197,8 +201,10 @@ export class ParticleEngine {
       const rect = opts.bounds?.();
       const width = rect?.width ?? this.width * .84, height = rect?.height ?? this.height * .64;
       const layout = createTextLayout(text, { x: rect?.x ?? this.width * .08, y: rect?.y ?? this.height * .18, width, height, fontSize: Math.min(rect ? 64 : 120, width / (rect ? 7 : 8)), fit: true, weight: 600 });
+      this.canvas.dataset.textFontSize = String(layout.fontSize);
+      this.canvas.dataset.textLineCount = String(new Set(layout.glyphs.map(g => g.y)).size);
       this.textBounds = layout.glyphs.length ? { x: Math.min(...layout.glyphs.map(g => g.x)) - 12, right: Math.max(...layout.glyphs.map(g => g.x + g.width)) + 12, y: Math.min(...layout.glyphs.map(g => g.y)) - layout.fontSize, bottom: Math.max(...layout.glyphs.map(g => g.y)) + layout.fontSize } : null;
-      this.presentation = { layout, timeline, start, typing: timeline.length > 0, cursorUntil: start + completion, cursorCount: -1 };
+      this.presentation = { layout, timeline, start, typing: timeline.length > 0, cursorUntil: start + completion, cursorCount: -1, formation: duration };
       const elapsed = this.time - start;
       this.textTargets = layout.targets.map(p => ({ ...p, delay: Math.max(0, (timeline[p.glyph ?? 0] ?? 0) - elapsed) }));
       if (timeline.length) {
@@ -218,6 +224,11 @@ export class ParticleEngine {
   }
   formUI(root: HTMLElement, animate = true) {
     this.uiRoot = root; this.captureUI(); this.mergeTargets(animate);
+  }
+  // Capture editable DOM ink into this same pool just before dissolving the scene.
+  departUI(root: HTMLElement) {
+    this.uiRoot = root; this.captureUI(true); this.mergeTargets(false);
+    this.disperseParticles(.4);
   }
   wait(ms: number, signal?: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -264,7 +275,12 @@ export class ParticleEngine {
     let forming = 0, dispersing = 0, floating = 0;
     const ambient = this.ambientCount();
     for (const p of this.particles) {
-      if (p.state === 'HOLDING') continue;
+      if (p.state === 'HOLDING') {
+        const ease = this.reducedMotion ? 1 : Math.min(1, dt * .16);
+        p.opacity += (p.targetOpacity - p.opacity) * ease;
+        p.size += (p.targetSize - p.size) * ease;
+        continue;
+      }
       if (p.state === 'FORMING' || p.state === 'MORPHING') {
         const age = this.time - p.activation;
         if (age < 0) { p.opacity += (.1 - p.opacity) * .05; ctx.globalAlpha = p.opacity; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill(); continue; }
@@ -277,7 +293,7 @@ export class ParticleEngine {
         p.velocityY = (p.velocityY + (anchorY - p.y) * .16 * dt) * Math.pow(.54, dt);
         p.x += p.velocityX * dt; p.y += p.velocityY * dt;
         p.opacity += (p.targetOpacity - p.opacity) * Math.min(1, .12 * dt);
-        if (progress === 1 && Math.hypot(p.x - p.targetX, p.y - p.targetY) < .3) { p.x = p.targetX; p.y = p.targetY; p.state = 'HOLDING'; }
+        if (progress === 1 && Math.hypot(p.x - p.targetX, p.y - p.targetY) < .3) { p.x = p.targetX; p.y = p.targetY; p.state = 'HOLDING'; p.size = p.targetSize; }
       } else {
         if (p.state === 'FLOATING' && floating++ >= ambient) { p.opacity = 0; continue; }
         if (!this.reducedMotion) {
@@ -305,7 +321,7 @@ export class ParticleEngine {
     if (this.presentation?.typing) {
       const presentation = this.presentation;
       const { layout, timeline, start, cursorUntil } = presentation;
-      const count = timeline.filter(t => t <= this.time - start).length;
+      const count = timeline.filter(t => t + presentation.formation * .75 <= this.time - start).length;
       const cursor = layout.cursors[count];
       if (cursor) {
         let i = 0;
@@ -321,10 +337,10 @@ export class ParticleEngine {
       }
     }
     // A handful of draw calls keeps dense glyphs bright and frames translucent.
-    for (const alpha of [.25, .5, .75, 1]) {
+    for (const alpha of [.125, .25, .375, .5, .625, .75, .875, 1]) {
       ctx.globalAlpha = alpha; ctx.beginPath();
-      for (const p of this.assignments.values()) if (p.state === 'HOLDING' && Math.ceil(p.targetOpacity * 4) / 4 === alpha) {
-        ctx.moveTo?.(p.x + p.targetSize, p.y); ctx.arc(p.x, p.y, p.targetSize, 0, Math.PI * 2);
+      for (const p of this.assignments.values()) if (p.state === 'HOLDING' && Math.round(p.opacity * 8) / 8 === alpha) {
+        ctx.moveTo?.(p.x + p.size, p.y); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
       }
       ctx.fill();
     }

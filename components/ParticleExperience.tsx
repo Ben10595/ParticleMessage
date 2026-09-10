@@ -47,8 +47,12 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
     if (transitionLock.current) return;
     transitionLock.current = true; setTransitioning(true); sequence.current?.abort();
     const controller = new AbortController(); sequence.current = controller;
-    engine?.disperseParticles();
-    try { await wait(engine?.reducedMotion ? 100 : 750, controller.signal); if (!controller.signal.aborted) { setView(next); setTransitioning(false); } }
+    try {
+      await wait(engine?.reducedMotion ? 0 : 180, controller.signal);
+      if (surface.current && engine) engine.departUI(surface.current);
+      await wait(engine?.reducedMotion ? 0 : 670, controller.signal);
+      if (!controller.signal.aborted) { setView(next); setTransitioning(false); }
+    }
     catch { /* A newer scene owns the particle pool. */ }
     finally { transitionLock.current = false; }
   }, [engine, wait]);
@@ -56,9 +60,10 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
   const play = useCallback(async (items: Slide[], options: MessageSettings = DEFAULT_SETTINGS) => {
     sequence.current?.abort(); const controller = new AbortController(); sequence.current = controller;
     transitionLock.current = true; setTransitioning(true); setPlaybackText('');
-    engine?.disperseParticles();
     try {
-      await wait(engine?.reducedMotion ? 0 : 850, controller.signal);
+      await wait(engine?.reducedMotion ? 0 : 180, controller.signal);
+      if (surface.current && engine) engine.departUI(surface.current);
+      await wait(engine?.reducedMotion ? 0 : 670, controller.signal);
       setView('playing'); setTransitioning(false); transitionLock.current = false;
       for (let index = 0; index < items.length; index++) {
         if (controller.signal.aborted) return;
@@ -67,7 +72,7 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
         const formation = engine?.formText(items[index].text, { ...opts, finale: options.finale && index === items.length - 1 }) ?? 0;
         await wait(formation + items[index].duration, controller.signal);
       }
-      engine?.disperseParticles(); setPlaybackText(''); setTransitioning(true);
+      engine?.disperseParticles(.4); setPlaybackText(''); setTransitioning(true);
       await wait(engine?.reducedMotion ? 0 : 1400, controller.signal);
       if (!controller.signal.aborted) { setView(slug ? 'ended' : 'editor'); setTransitioning(false); }
     } catch (cause) {
@@ -125,7 +130,7 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
     catch { linkInput.current?.focus(); linkInput.current?.select(); setCopyStatus('Link markiert — bitte kopieren'); }
   }
   const showChrome = !slug && view !== 'playing' && view !== 'ended';
-  return <main className={`experience ${engine && !fallback ? 'canvas-ready' : ''} ${transitioning ? 'transitioning' : ''} ${!engine && !fallback ? 'canvas-pending' : ''}`} ref={surface}>
+  return <main className={`experience ${engine && !fallback ? 'canvas-ready' : ''} ${transitioning ? 'transitioning' : ''} ${!engine && !fallback ? 'canvas-pending' : ''}`} ref={surface} aria-busy={transitioning || busy} onKeyDownCapture={event => { if (transitioning) event.preventDefault(); }}>
     <ParticleCanvas onReady={setEngine} onError={onError} />
     {fallback && <p className="fallback-note" role="status">Canvas ist hier nicht verfügbar. Du kannst die Nachricht trotzdem schreiben, teilen und lesen.</p>}
     {showChrome && <header className="masthead"><span data-particle="text" className="wordmark">PARTICLEMESSAGE</span>{view === 'editor' ? <button data-particle="button" className="back" disabled={busy} onClick={() => void transition('home')}>← Zurück</button> : <span data-particle="text" className="edition">WORTE IN BEWEGUNG</span>}</header>}

@@ -1,4 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
+async function select(page: Page, label: string, option: string) {
+  await page.getByRole('combobox', { name: label, exact: true }).click();
+  await page.getByRole('option', { name: option, exact: true }).click();
+}
 const content = { version: 1, slides: [{ text: 'Schön, dass es dich gibt. ❤️', duration: 4000 }, { text: 'Du machst den Unterschied. ✨', duration: 1000 }] };
 async function unlock(page: Page) {
   await page.goto('/');
@@ -36,10 +40,10 @@ test('per-slide writing, emoji insertion at cursor, ordering, preview, save and 
   await page.getByRole('button', { name: '❤️ einfügen', exact: true }).click();
   await expect(input).toHaveValue('❤️Hallo Welt');
   await page.getByRole('switch', { name: 'Schreibanimation' }).check();
-  await page.getByLabel('Schreibrhythmus').selectOption('Ruhig');
+  await select(page, 'Schreibrhythmus', 'Ruhig');
   await page.getByText('Timing verfeinern +', { exact: true }).click();
   await page.getByLabel('Fragezeichen ?', { exact: true }).fill('1000');
-  await page.getByLabel('Übergang dieses Abschnitts').selectOption('wave');
+  await select(page, 'Übergang dieses Abschnitts', 'Wave');
   await page.getByRole('button', { name: 'Abschnitt hinzufügen', exact: true }).click();
   await page.getByRole('textbox', { name: 'ABSCHNITT 02' }).fill('Du bist wunderbar. ✨');
   await expect(page.getByRole('switch', { name: 'Schreibanimation' })).not.toBeChecked();
@@ -83,7 +87,7 @@ test('live preview uses writing, hold duration, and replays from same pool', asy
   await unlock(page);
   await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Hi. A❤️');
   await page.getByRole('switch', { name: 'Schreibanimation' }).check();
-  await page.getByLabel('Schreibrhythmus').selectOption('Dramatisch');
+  await select(page, 'Schreibrhythmus', 'Dramatisch');
   await page.getByLabel('Live-Vorschau').scrollIntoViewIfNeeded();
   await page.getByRole('button', { name: 'Abschnitt erneut abspielen' }).click();
   await expect(page.locator('canvas')).toHaveAttribute('data-visible-characters', '3');
@@ -110,7 +114,7 @@ test('reduced motion, public replay and automatic editor return', async ({ page 
   await page.getByRole('button', { name: 'Nochmal' }).click();
   await expect(page.getByRole('region', { name: 'Nachricht', exact: true })).toBeVisible();
   await unlock(page); await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Bis gleich.');
-  await page.getByLabel('Dauer des fertigen Textes').selectOption('1000');
+  await select(page, 'Dauer des fertigen Textes', '1 Sekunden');
   await page.getByRole('button', { name: 'Vorschau', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Vorschau', exact: true })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'ABSCHNITT 01' })).toBeVisible({ timeout: 8000 });
@@ -162,4 +166,44 @@ test('150-character message wraps legibly within desktop and mobile canvas', asy
   await expect(page.locator('.viewer-text')).toHaveText(text);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: `test-results/long-text-${testInfo.project.name}.png` });
+});
+
+
+test('custom selects support keyboard navigation, escape, typeahead and outside dismissal', async ({ page }) => {
+  await unlock(page);
+  const combo = page.getByRole('combobox', { name: 'Übergang dieses Abschnitts' });
+  await combo.focus(); await combo.press('Enter');
+  await expect(page.getByRole('option', { name: 'Smooth Morph' })).toHaveAttribute('aria-selected', 'true');
+  await combo.press('ArrowDown'); await combo.press('Enter');
+  await expect(combo).toHaveText('Scatter');
+  await combo.press('Enter'); await combo.press('End'); await combo.press('Escape');
+  await expect(combo).toHaveText('Scatter'); await expect(combo).toBeFocused();
+  await combo.press('w'); await combo.press('a'); await combo.press('Enter');
+  await expect(combo).toHaveText('Wave');
+  await combo.click(); await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).click();
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  await combo.click(); await combo.press('Tab'); await expect(combo).not.toBeFocused();
+  await expect(page.locator('select')).toHaveCount(0);
+});
+
+test('edit debounce, long unbroken text and scene departure retain the editor until particles leave', async ({ page }, testInfo) => {
+  await unlock(page);
+  const input = page.getByRole('textbox', { name: 'ABSCHNITT 01' });
+  await input.fill('Ein ruhiger Anfang.');
+  await expect.poll(async () => Number(await page.locator('canvas').getAttribute('data-text-target-count'))).toBeGreaterThan(50);
+  const previous = await page.locator('canvas').getAttribute('data-text-target-count');
+  await input.fill('W'.repeat(150));
+  expect(await page.locator('canvas').getAttribute('data-text-target-count')).toBe(previous);
+  await expect.poll(async () => page.locator('canvas').getAttribute('data-text-target-count')).not.toBe(previous);
+  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
+  expect(Number(await page.locator('canvas').getAttribute('data-text-font-size'))).toBeGreaterThanOrEqual(16);
+  await page.getByLabel('Live-Vorschau').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `test-results/unbroken-${testInfo.project.name}.png` });
+  await page.getByRole('button', { name: 'Vorschau', exact: true }).click();
+  await expect(page.locator('main')).toHaveClass(/transitioning/);
+  await expect(page.getByLabel('Nachrichteneditor')).toBeAttached();
+  expect(await page.getByLabel('Nachrichteneditor').evaluate(el => getComputedStyle(el).visibility)).toBe('visible');
+  await expect(page.getByRole('region', { name: 'Vorschau', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Vorschau beenden' }).click();
+  await expect(input).toHaveValue('W'.repeat(150));
 });

@@ -12,7 +12,7 @@ export function useParticleSurface(engine: ParticleEngine | null, surface: RefOb
     };
     timer = window.setTimeout(() => engine.formUI(root), scene === 'home' || scene === 'password' ? 450 : 45);
     const mutation = new MutationObserver(update);
-    mutation.observe(root, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['disabled', 'aria-current', 'open', 'checked', 'data-text'] });
+    mutation.observe(root, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['disabled', 'aria-current', 'open', 'checked', 'data-text', 'aria-expanded', 'aria-selected'] });
     const resize = new ResizeObserver(() => engine.refresh());
     resize.observe(root);
     for (const event of ['input', 'change', 'focusin', 'focusout', 'pointerover', 'pointerout', 'pointerdown', 'pointerup', 'toggle']) root.addEventListener(event, update, true);
