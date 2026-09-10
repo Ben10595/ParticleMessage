@@ -100,3 +100,62 @@ test('morphs from current positions, settles exactly, protects glyphs from point
     for (const [key, descriptor] of original) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   }
 });
+
+test('animates wandering contours, hover sparks, pointer wake and typing stream', () => {
+  const original = new Map<string, PropertyDescriptor | undefined>();
+  const mock = (key: string, value: unknown) => { original.set(key, Object.getOwnPropertyDescriptor(globalThis, key)); Object.defineProperty(globalThis, key, { configurable: true, writable: true, value }); };
+  let frame: FrameRequestCallback = () => {};
+  const events = new Map<string, (event: unknown) => void>();
+  mock('window', { innerWidth: 900, innerHeight: 700, devicePixelRatio: 1, addEventListener: (name: string, fn: (event: unknown) => void) => events.set(name, fn), removeEventListener() {} });
+  const spriteContext = { createRadialGradient: () => ({ addColorStop() {} }), fillRect() {} };
+  mock('document', { createElement: () => ({ getContext: () => spriteContext }), hidden: false, addEventListener() {}, removeEventListener() {} });
+  mock('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
+  mock('requestAnimationFrame', (fn: FrameRequestCallback) => { frame = fn; return 1; });
+  mock('cancelAnimationFrame', () => {});
+  const context = { drawImage() {}, setTransform() {}, fillRect() {}, beginPath() {}, moveTo() {}, arc() {}, fill() {} };
+  const canvas = { dataset: {}, getContext: () => context } as unknown as HTMLCanvasElement;
+  let engine: ParticleEngine | undefined;
+  try {
+    engine = new ParticleEngine(canvas);
+
+    // 1. Wandering contour test
+    const rectTargets = [{
+      key: 'loop-p1',
+      x: 10,
+      y: 10,
+      loop: { type: 'rect' as const, x: 10, y: 10, width: 100, height: 50, perimeter: 300, offset: 0, speed: 20 },
+    }];
+    engine.setParticleTargets(rectTargets, false);
+    const loopP = engine.particles.find(p => p.targetX === 10 && p.targetY === 10)!;
+    assert.equal(loopP.state, 'HOLDING');
+    assert.equal(loopP.x, 10);
+    assert.equal(loopP.y, 10);
+
+    // Advance time and check that points wander along the perimeter
+    for (let t = 0; t < 1000; t += 16.67) frame(t);
+    assert.ok(loopP.x > 10, 'wandering border dot advances along top edge');
+    assert.equal(loopP.y, 10);
+
+    // 2. Hover sparks test
+    engine.triggerHoverSparks({ x: 50, y: 50, width: 80, height: 35 }, 12);
+    // Frame updates sparks
+    frame(1050);
+
+    // 3. Pointer trail (Schweif)
+    events.get('pointermove')?.({ clientX: 200, clientY: 200 });
+    events.get('pointermove')?.({ clientX: 240, clientY: 220 });
+    frame(1070);
+
+    // 4. Typing stream flow
+    engine.emitTypingFlow(
+      { right: 300, top: 200, height: 150, width: 200, left: 100, bottom: 350, x: 100, y: 200, toJSON: () => {} },
+      { left: 500, top: 200, height: 300, width: 300, right: 800, bottom: 500, x: 500, y: 200, toJSON: () => {} }
+    );
+    for (let t = 1100; t < 2000; t += 16.67) frame(t);
+
+    engine.destroy();
+  } finally {
+    engine?.destroy();
+    for (const [key, descriptor] of original) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
+  }
+});

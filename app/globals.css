@@ -14,7 +14,7 @@ button:enabled:hover,summary:hover,.text-field:hover,.password-field:hover{borde
 button:focus-visible,a:focus-visible,summary:focus-visible,input:focus-visible,textarea:focus-visible{outline:none;box-shadow:0 0 0 2px #070605,0 0 0 3px #e2c99f84,0 0 14px #f2cf9312}
 .text-field:focus-within,.password-field:focus-within{border-color:#fff0d2;box-shadow:0 0 14px #f2cf9312}
 .text-field textarea:focus-visible,.password-field input:focus-visible{box-shadow:none}
-.canvas-ready button:focus-visible,.canvas-ready a:focus-visible,.canvas-ready summary:focus-visible,.canvas-ready input:focus-visible{outline:1px dotted #f2d9ada0;outline-offset:4px}
+.canvas-ready button:focus-visible,.canvas-ready a:focus-visible,.canvas-ready summary:focus-visible,.canvas-ready input:focus-visible{outline:1px dotted #dce5f0a0;outline-offset:4px}
 .particle-select{position:relative;width:178px;flex-shrink:0}
 .select-trigger{width:100%;min-height:44px;padding:10px 26px 10px 10px;text-align:left;font-size:14px}
 .dot-chevron{position:absolute;right:10px;top:19px;width:8px;height:5px;background:radial-gradient(circle at 1px 1px,currentColor 1px,transparent 1.2px),radial-gradient(circle at 4px 4px,currentColor 1px,transparent 1.2px),radial-gradient(circle at 7px 1px,currentColor 1px,transparent 1.2px)}

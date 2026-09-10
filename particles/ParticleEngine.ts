@@ -12,6 +12,48 @@ export interface Particle {
   size: number; opacity: number; idleOffset: number; phase: number; speed: number; spring: number;
   state: ParticleState; activation: number; release: number; targetOpacity: number; targetSize: number;
   fromX: number; fromY: number; controlX: number; controlY: number; duration: number; homeX: number; homeY: number;
+  theme?: 'cool' | 'warm';
+  isUI?: boolean;
+  loop?: Target['loop'];
+  baseTargetX?: number;
+  baseTargetY?: number;
+  sparkle?: number;
+}
+interface Spark {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  alpha: number;
+}
+interface TrailParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  life: number;
+  maxLife: number;
+  opacity: number;
+}
+interface FlowParticle {
+  startX: number;
+  startY: number;
+  controlX: number;
+  controlY: number;
+  endX: number;
+  endY: number;
+  x: number;
+  y: number;
+  startTime: number;
+  duration: number;
+  size: number;
+  alpha: number;
+  seed: number;
 }
 interface Presentation { layout: TextLayout; timeline: number[]; start: number; typing: boolean; cursorUntil: number; cursorCount: number; formation: number }
 export interface FormOptions { bounds?: () => DOMRect; writing?: WritingSettings; effect?: TransitionEffect; finale?: boolean }
@@ -20,6 +62,10 @@ export class ParticleEngine {
   width = 0; height = 0; time = 0; reducedMotion = false;
   private ctx: CanvasRenderingContext2D;
   private dustSprite: HTMLCanvasElement;
+  private dustSpriteCool: HTMLCanvasElement;
+  private sparks: Spark[] = [];
+  private trail: TrailParticle[] = [];
+  private flowParticles: FlowParticle[] = [];
   private dpr = 1;
   private frame = 0; private lastFrame = 0; private disposed = false;
   private pointer = { x: -1000, y: -1000 };
@@ -41,7 +87,11 @@ export class ParticleEngine {
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) throw new Error('Canvas wird von deinem Browser nicht unterstützt.');
-    this.ctx = ctx; this.dustSprite = this.createDustSprite(); this.reducedMotion = this.motion.matches; this.resize();
+    this.ctx = ctx;
+    this.dustSprite = this.createDustSprite(false);
+    this.dustSpriteCool = this.createDustSprite(true);
+    this.reducedMotion = this.motion.matches;
+    this.resize();
     window.addEventListener('resize', this.resize);
     window.addEventListener('scroll', this.refresh, { passive: true });
     window.addEventListener('pointermove', this.move, { passive: true });
@@ -52,14 +102,37 @@ export class ParticleEngine {
   }
   private changeMotion = () => { this.reducedMotion = this.motion.matches; this.refresh(); };
   private visibility = () => { this.lastFrame = 0; };
-  private move = (event: PointerEvent) => { this.pointer.x = event.clientX; this.pointer.y = event.clientY; };
+  private move = (event: PointerEvent) => {
+    const prevX = this.pointer.x, prevY = this.pointer.y;
+    this.pointer.x = event.clientX; this.pointer.y = event.clientY;
+    const dist = Math.hypot(event.clientX - prevX, event.clientY - prevY);
+    if (dist > 7 && prevX >= 0 && !this.reducedMotion && this.trail.length < 36) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 0.2 + Math.random() * 0.5;
+      this.trail.push({
+        x: event.clientX + (Math.random() - 0.5) * 6,
+        y: event.clientY + (Math.random() - 0.5) * 6,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size: 0.9 + Math.random() * 1.3,
+        life: 600,
+        maxLife: 600,
+        opacity: 0.28,
+      });
+    }
+  };
   private leave = () => { this.pointer.x = -1000; this.pointer.y = -1000; };
-  private createDustSprite() {
+  private createDustSprite(cool = false) {
     const sprite = document.createElement('canvas'); sprite.width = sprite.height = 32;
     const ctx = sprite.getContext('2d')!;
     const halo = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
-    halo.addColorStop(0, '#fff3d9'); halo.addColorStop(.22, '#ffeac8');
-    halo.addColorStop(.46, '#f2cf9348'); halo.addColorStop(1, '#d9a65c00');
+    if (cool) {
+      halo.addColorStop(0, '#edf4fc'); halo.addColorStop(.22, '#d8e5f2');
+      halo.addColorStop(.46, '#a4c2e038'); halo.addColorStop(1, '#88a8cc00');
+    } else {
+      halo.addColorStop(0, '#fff3d9'); halo.addColorStop(.22, '#ffeac8');
+      halo.addColorStop(.46, '#f2cf9348'); halo.addColorStop(1, '#d9a65c00');
+    }
     ctx.fillStyle = halo; ctx.fillRect(0, 0, 32, 32);
     return sprite;
   }
@@ -72,7 +145,7 @@ export class ParticleEngine {
       size: ambientSize, opacity: .08, idleOffset: Math.random() * Math.PI * 2,
       phase: Math.random() * 10, speed: .4 + Math.random() * .6, spring: .16,
       state: 'FLOATING', activation: 0, release: 0, targetOpacity: 1, targetSize: 1,
-      fromX: x, fromY: y, controlX: x, controlY: y, duration: 1000 };
+      fromX: x, fromY: y, controlX: x, controlY: y, duration: 1000, theme: 'cool' };
   }
   private desiredCount() { return Math.round((this.width < 700 ? 1400 : 3000) * this.performanceScale); }
   private ambientCount() { return Math.max(Math.round((this.width < 700 ? 500 : 900) * this.performanceScale), this.desiredCount() - this.assignments.size); }
@@ -151,6 +224,11 @@ export class ParticleEngine {
         p = take(occupied, target) ?? take(floating, target) ?? take(occupied) ?? take(floating)!;
         available.delete(p); next.set(key, p);
       }
+      p.theme = target.theme ?? (key.startsWith('ui-') ? 'cool' : 'warm');
+      p.isUI = Boolean(target.isUI || key.startsWith('ui-'));
+      p.loop = target.loop;
+      p.baseTargetX = target.x;
+      p.baseTargetY = target.y;
       const unchanged = p.targetX === target.x && p.targetY === target.y && (p.state === 'HOLDING' || p.state === 'FORMING' || p.state === 'MORPHING');
       p.targetX = target.x; p.targetY = target.y; p.targetOpacity = target.opacity ?? 1; p.glow = target.glow ?? false; p.targetSize = target.size ?? 1;
       if (unchanged) return;
@@ -193,27 +271,33 @@ export class ParticleEngine {
     vx += (Math.max(0, 60 - p.x) - Math.max(0, p.x - this.width + 60)) * .004;
     vy += (Math.max(0, 60 - p.y) - Math.max(0, p.y - this.height + 60)) * .004;
     const dx = p.x - this.pointer.x, dy = p.y - this.pointer.y, distance = Math.hypot(dx, dy);
-    if (distance > 1 && distance < 90) {
-      const force = (1 - distance / 90) ** 2 * .18;
-      vx += dx / distance * force; vy += dy / distance * force;
+    const radius = 130;
+    if (distance > 1 && distance < radius) {
+      const force = ((1 - distance / radius) ** 1.6) * .42;
+      vx += (dx / distance) * force * 1.8;
+      vy += (dy / distance) * force * 1.8;
+      vx += (-dy / distance) * force * .35;
+      vy += (dx / distance) * force * .35;
     }
     const ease = 1 - Math.exp(-.045 * dt);
     p.velocityX += (vx - p.velocityX) * ease; p.velocityY += (vy - p.velocityY) * ease;
     p.x += p.velocityX * dt; p.y += p.velocityY * dt;
   }
-  private heldDot(p: Particle) {
+  private heldDot(p: Particle, sizeScale = 1) {
     // Subpixel-sized dots on pixel intersections otherwise become four grey pixels.
     // Align only settled cores; flying dust keeps continuous, unsnapped positions.
-    const x = p.size < 1 ? (Math.round(p.x * this.dpr - .5) + .5) / this.dpr : p.x;
-    const y = p.size < 1 ? (Math.round(p.y * this.dpr - .5) + .5) / this.dpr : p.y;
+    const effectiveSize = p.size * sizeScale;
+    const x = effectiveSize < 1 ? (Math.round(p.x * this.dpr - .5) + .5) / this.dpr : p.x;
+    const y = effectiveSize < 1 ? (Math.round(p.y * this.dpr - .5) + .5) / this.dpr : p.y;
     // Chromium can cull tiny batched circles; keep a visible core at every DPR.
-    const radius = Math.max(p.size, .55 / this.dpr);
+    const radius = Math.max(effectiveSize, .55 / this.dpr);
     this.ctx.moveTo?.(x + radius, y); this.ctx.arc(x, y, radius, 0, Math.PI * 2);
   }
   private drawDust(p: Particle, opacity = p.opacity) {
     const radius = p.size * (2.1 + (1 - p.depth) * .9);
     this.ctx.globalAlpha = opacity;
-    this.ctx.drawImage(this.dustSprite, p.x - radius, p.y - radius, radius * 2, radius * 2);
+    const sprite = p.theme === 'warm' ? this.dustSprite : this.dustSpriteCool;
+    this.ctx.drawImage(sprite, p.x - radius, p.y - radius, radius * 2, radius * 2);
   }
 
   disperseParticles(strength = 1) {
@@ -255,10 +339,10 @@ export class ParticleEngine {
       this.textBounds = layout.glyphs.length ? { x: Math.min(...layout.glyphs.map(g => g.x)) - 12, right: Math.max(...layout.glyphs.map(g => g.x + g.width)) + 12, y: Math.min(...layout.glyphs.map(g => g.y)) - layout.fontSize, bottom: Math.max(...layout.glyphs.map(g => g.y)) + layout.fontSize } : null;
       this.presentation = { layout, timeline, start, typing: timeline.length > 0, cursorUntil: start + completion, cursorCount: -1, formation: duration };
       const elapsed = this.time - start;
-      this.textTargets = layout.targets.map(p => ({ ...p, delay: Math.max(0, (timeline[p.glyph ?? 0] ?? 0) - elapsed) }));
+      this.textTargets = layout.targets.map(p => ({ ...p, theme: 'warm' as const, delay: Math.max(0, (timeline[p.glyph ?? 0] ?? 0) - elapsed) }));
       if (timeline.length) {
         const cursor = layout.cursors[0];
-        if (cursor) this.textTargets.push(...createLineTargets(cursor.x + 3, cursor.y - layout.fontSize * .4, cursor.x + 3, cursor.y + layout.fontSize * .4, 2.4).map((p, i) => ({ ...p, key: `cursor-${i}`, size: .8, opacity: .8 })));
+        if (cursor) this.textTargets.push(...createLineTargets(cursor.x + 3, cursor.y - layout.fontSize * .4, cursor.x + 3, cursor.y + layout.fontSize * .4, 2.4).map((p, i) => ({ ...p, key: `cursor-${i}`, size: .8, opacity: .8, theme: 'warm' as const })));
       }
       this.mergeTargets(!refresh, opts.effect, duration);
       // Resize preserves the writing timeline and never reveals future letters early.
@@ -328,6 +412,33 @@ export class ParticleEngine {
         const ease = this.reducedMotion ? 1 : Math.min(1, dt * .16);
         p.opacity += (p.targetOpacity - p.opacity) * ease;
         p.size += (p.targetSize - p.size) * ease;
+        if (p.loop && !this.reducedMotion) {
+          if (p.loop.type === 'rect' && p.loop.width && p.loop.height) {
+            const { x, y, width, height, perimeter, offset, speed } = p.loop;
+            let d = (offset + this.time * speed * 0.001) % perimeter;
+            if (d < 0) d += perimeter;
+            let px = x, py = y;
+            if (d < width) {
+              px = x + d; py = y;
+            } else if (d < width + height) {
+              px = x + width; py = y + (d - width);
+            } else if (d < width * 2 + height) {
+              px = x + width - (d - width - height); py = y + height;
+            } else {
+              px = x; py = y + height - (d - width * 2 - height);
+            }
+            p.targetX = px; p.targetY = py; p.x = px; p.y = py;
+          } else if (p.loop.type === 'line' && p.loop.x2 !== undefined && p.loop.y2 !== undefined) {
+            const { x, y, x2, y2, perimeter, offset, speed } = p.loop;
+            if (perimeter > 0) {
+              let d = (offset + this.time * speed * 0.001) % perimeter;
+              if (d < 0) d += perimeter;
+              const t = d / perimeter;
+              const px = x + (x2 - x) * t, py = y + (y2 - y) * t;
+              p.targetX = px; p.targetY = py; p.x = px; p.y = py;
+            }
+          }
+        }
         continue;
       }
       if (p.state === 'FORMING' || p.state === 'MORPHING') {
@@ -393,22 +504,157 @@ export class ParticleEngine {
         presentation.cursorCount = count;
       }
     }
-    // A handful of draw calls keeps dense glyphs bright and frames translucent.
+
+    const uiHolding: Particle[] = [];
+    const previewHolding: Particle[] = [];
+    for (const p of this.assignments.values()) {
+      if (p.state === 'HOLDING') {
+        if (p.theme === 'cool' || p.isUI) uiHolding.push(p);
+        else previewHolding.push(p);
+      }
+    }
+
+    // 1. Cool silver UI pass (menus, boxes, buttons with organic breathing)
+    ctx.fillStyle = '#dce6f2';
     for (const alpha of [.125, .25, .375, .5, .625, .75, .875, 1]) {
       ctx.globalAlpha = alpha; ctx.beginPath();
-      for (const p of this.assignments.values()) if (p.state === 'HOLDING' && Math.round(p.opacity * 8) / 8 === alpha && (!p.glow || p.targetOpacity < 1)) {
+      for (const p of uiHolding) {
+        const breath = this.reducedMotion ? 1 : (0.90 + 0.10 * Math.sin(this.time * 0.0022 + p.animationSeed * 6.28 + (p.targetX + p.targetY) * 0.003));
+        const lineWave = p.loop?.type === 'line' && !this.reducedMotion ? (0.8 + 0.2 * Math.sin(this.time * 0.0035 - p.x * 0.035)) : 1;
+        const currentOpacity = p.opacity * breath * lineWave;
+        if (Math.round(currentOpacity * 8) / 8 === alpha && (!p.glow || p.targetOpacity < 1)) {
+          const scale = p.sparkle && this.time < p.sparkle ? 1 + 0.35 * Math.sin((p.sparkle - this.time) / 350 * Math.PI) : 1;
+          this.heldDot(p, scale);
+        }
+      }
+      ctx.fill();
+    }
+    // Cool UI bloom for glowing controls
+    ctx.globalAlpha = 1; ctx.beginPath();
+    for (const p of uiHolding) if (p.glow && p.targetOpacity === 1) {
+      const scale = p.sparkle && this.time < p.sparkle ? 1 + 0.35 * Math.sin((p.sparkle - this.time) / 350 * Math.PI) : 1;
+      this.heldDot(p, scale);
+    }
+    ctx.shadowColor = '#c8d8ec30'; ctx.shadowBlur = 3; ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // 2. Warm gold preview / message pass (radiant warm gold with glowing halo)
+    ctx.fillStyle = '#ffe29e';
+    for (const alpha of [.125, .25, .375, .5, .625, .75, .875, 1]) {
+      ctx.globalAlpha = alpha; ctx.beginPath();
+      for (const p of previewHolding) if (Math.round(p.opacity * 8) / 8 === alpha && (!p.glow || p.targetOpacity < 1)) {
         this.heldDot(p);
       }
       ctx.fill();
     }
-    // A single batched bloom pass; sharp letter cores are drawn again without blur.
-    // No per-particle shadowBlur, and no blur on the canvas or accessible DOM.
     ctx.globalAlpha = 1; ctx.beginPath();
-    for (const p of this.assignments.values()) if (p.state === 'HOLDING' && p.glow && p.targetOpacity === 1) {
+    for (const p of previewHolding) if (p.glow && p.targetOpacity === 1) {
       this.heldDot(p);
     }
-    ctx.shadowColor = '#f2c07838'; ctx.shadowBlur = 4; ctx.fill();
+    ctx.shadowColor = '#f5b84c55'; ctx.shadowBlur = 5; ctx.fill();
     ctx.shadowBlur = 0; ctx.fill();
+
+    // 3. Render cursor trail (stardust wake)
+    if (this.trail.length > 0) {
+      const remainingTrail: TrailParticle[] = [];
+      for (const t of this.trail) {
+        t.x += t.vx * dt;
+        t.y += t.vy * dt;
+        t.vx *= Math.pow(0.97, dt);
+        t.vy *= Math.pow(0.97, dt);
+        t.life -= elapsed;
+        if (t.life > 0) {
+          remainingTrail.push(t);
+          const progress = t.life / t.maxLife;
+          ctx.globalAlpha = t.opacity * progress;
+          ctx.fillStyle = '#e8f0fe';
+          ctx.beginPath();
+          ctx.arc(t.x, t.y, t.size * progress, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      this.trail = remainingTrail;
+    }
+
+    // 4. Render hover sparks
+    if (this.sparks.length > 0) {
+      const remainingSparks: Spark[] = [];
+      for (const spark of this.sparks) {
+        spark.x += spark.vx * dt;
+        spark.y += spark.vy * dt;
+        spark.vx *= Math.pow(0.96, dt);
+        spark.vy *= Math.pow(0.96, dt);
+        spark.life -= elapsed;
+        if (spark.life > 0) {
+          remainingSparks.push(spark);
+          const progress = spark.life / spark.maxLife;
+          ctx.globalAlpha = spark.alpha * progress;
+          ctx.fillStyle = spark.color;
+          ctx.beginPath();
+          ctx.arc(spark.x, spark.y, spark.size * Math.max(0.2, progress), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      this.sparks = remainingSparks;
+    }
+
+    // 5. Render typing flow particles (celestial arc from textfield to preview)
+    if (this.flowParticles.length > 0) {
+      const remainingFlow: FlowParticle[] = [];
+      ctx.fillStyle = '#ffd885';
+      for (const flow of this.flowParticles) {
+        if (this.time < flow.startTime) {
+          remainingFlow.push(flow);
+          continue;
+        }
+        const age = this.time - flow.startTime;
+        const progress = Math.min(1, age / flow.duration);
+        const t = smoothstep(progress);
+
+        const oneMinusT = 1 - t;
+        flow.x = oneMinusT * oneMinusT * flow.startX + 2 * oneMinusT * t * flow.controlX + t * t * flow.endX;
+        flow.y = oneMinusT * oneMinusT * flow.startY + 2 * oneMinusT * t * flow.controlY + t * t * flow.endY;
+
+        if (progress < 1) {
+          remainingFlow.push(flow);
+          const alpha = flow.alpha * (progress < 0.1 ? progress * 10 : progress > 0.85 ? (1 - progress) / 0.15 : 1);
+          ctx.globalAlpha = alpha;
+          ctx.beginPath();
+          ctx.arc(flow.x, flow.y, flow.size, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (Math.random() > 0.65 && this.sparks.length < 50) {
+            this.sparks.push({
+              x: flow.x + (Math.random() - 0.5) * 3,
+              y: flow.y + (Math.random() - 0.5) * 3,
+              vx: (Math.random() - 0.5) * 0.3,
+              vy: (Math.random() - 0.5) * 0.3,
+              size: flow.size * 0.6,
+              life: 220,
+              maxLife: 220,
+              color: '#ffeab3',
+              alpha: 0.6,
+            });
+          }
+        } else if (this.sparks.length < 50) {
+          for (let s = 0; s < 2; s++) {
+            this.sparks.push({
+              x: flow.endX + (Math.random() - 0.5) * 10,
+              y: flow.endY + (Math.random() - 0.5) * 10,
+              vx: (Math.random() - 0.5) * 0.6,
+              vy: (Math.random() - 0.5) * 0.6,
+              size: flow.size * 0.8,
+              life: 300,
+              maxLife: 300,
+              color: '#ffd885',
+              alpha: 0.7,
+            });
+          }
+        }
+      }
+      this.flowParticles = remainingFlow;
+    }
+
     if (this.presentation) {
       const { layout, timeline, start, typing } = this.presentation;
       const count = typing ? timeline.filter(t => t <= this.time - start).length : layout.count;
@@ -420,11 +666,76 @@ export class ParticleEngine {
     const phase = forming ? 'forming' : dispersing ? 'dispersing' : this.assignments.size ? 'holding' : 'floating';
     if (this.canvas.dataset.phase !== phase) this.canvas.dataset.phase = phase;
   };
+  triggerHoverSparks(rect: { x: number; y: number; width: number; height: number }, count = 16) {
+    if (this.reducedMotion) return;
+    const numSparks = Math.min(count, 24);
+    for (let i = 0; i < numSparks; i++) {
+      const side = Math.floor(Math.random() * 4);
+      let x = rect.x, y = rect.y, nx = 0, ny = 0;
+      if (side === 0) { x += Math.random() * rect.width; ny = -1; }
+      else if (side === 1) { x += rect.width; y += Math.random() * rect.height; nx = 1; }
+      else if (side === 2) { x += Math.random() * rect.width; y += rect.height; ny = 1; }
+      else { y += Math.random() * rect.height; nx = -1; }
+      const speed = 0.8 + Math.random() * 2.0;
+      const angle = Math.atan2(ny, nx) + (Math.random() - 0.5) * 1.2;
+      const maxLife = 350 + Math.random() * 300;
+      this.sparks.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size: 0.8 + Math.random() * 1.1,
+        life: maxLife,
+        maxLife,
+        color: Math.random() > 0.35 ? '#ffffff' : '#dce6f2',
+        alpha: 0.9,
+      });
+    }
+    for (const p of this.assignments.values()) {
+      if (p.state === 'HOLDING' && p.x >= rect.x - 6 && p.x <= rect.x + rect.width + 6 && p.y >= rect.y - 6 && p.y <= rect.y + rect.height + 6) {
+        p.sparkle = this.time + 350;
+      }
+    }
+  }
+  emitTypingFlow(fromRect?: DOMRect | null, toRect?: DOMRect | null) {
+    if (this.reducedMotion) return;
+    const source = fromRect ?? (typeof document !== 'undefined' ? document.querySelector('.text-field')?.getBoundingClientRect() : null);
+    const target = toRect ?? (typeof document !== 'undefined' ? document.querySelector('.preview-bounds')?.getBoundingClientRect() : null);
+    if (!source || !target) return;
+
+    const count = 10 + Math.floor(Math.random() * 5);
+    for (let i = 0; i < count; i++) {
+      const startX = source.right - 10 + (Math.random() - 0.5) * 16;
+      const startY = source.top + source.height * (0.25 + Math.random() * 0.5);
+      const endX = target.left + target.width * (0.2 + Math.random() * 0.6);
+      const endY = target.top + target.height * (0.3 + Math.random() * 0.4);
+
+      const midX = (startX + endX) / 2 + (Math.random() - 0.5) * 50;
+      const arcHeight = Math.min(startY, endY) - 50 - Math.random() * 70;
+      const controlX = midX;
+      const controlY = arcHeight;
+
+      const delay = i * 20 + Math.random() * 15;
+      const duration = 560 + Math.random() * 220;
+
+      this.flowParticles.push({
+        startX, startY,
+        controlX, controlY,
+        endX, endY,
+        x: startX, y: startY,
+        startTime: this.time + delay,
+        duration,
+        size: 1.2 + Math.random() * 1.1,
+        alpha: 0.95,
+        seed: Math.random(),
+      });
+    }
+  }
   destroy() {
     this.disposed = true; cancelAnimationFrame(this.frame); cancelAnimationFrame(this.refreshFrame);
     window.removeEventListener('resize', this.resize); window.removeEventListener('scroll', this.refresh);
     window.removeEventListener('pointermove', this.move); window.removeEventListener('pointerout', this.leave);
     document.removeEventListener('visibilitychange', this.visibility); this.motion.removeEventListener('change', this.changeMotion);
     this.waiters.forEach(waiter => waiter.abort()); this.waiters.clear();
+    this.sparks = []; this.trail = []; this.flowParticles = [];
   }
 }

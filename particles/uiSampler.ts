@@ -21,7 +21,7 @@ export function sampleUI(root: HTMLElement, viewportHeight: number, departing = 
     const pressed = element.matches(':active');
     const active = element.matches(':hover, :focus-visible, :focus-within') || element.getAttribute('aria-current') === 'step' || element.getAttribute('aria-expanded') === 'true';
     const opacity = disabled ? .24 : active ? .92 : kind === 'frame' ? .34 : .65;
-    const append = (points: Target[], suffix: string) => targets.push(...points.map((p, i) => ({ ...p, key: `${key}-${suffix}-${i}`, opacity, size: (p.size ?? .85) * (pressed ? 1.25 : active ? 1.08 : 1), delay: Number(element.dataset.particleDelay ?? 0) + Math.min(220, i * .08) })));
+    const append = (points: Target[], suffix: string) => targets.push(...points.map((p, i) => ({ ...p, key: `${key}-${suffix}-${i}`, opacity, size: (p.size ?? .85) * (pressed ? 1.25 : active ? 1.08 : 1), delay: Number(element.dataset.particleDelay ?? 0) + Math.min(220, i * .08), theme: 'cool' as const, isUI: true })));
     if (kind === 'frame' || kind === 'button' || kind === 'control') {
       append(createRectangleTargets(rect.x, rect.y, rect.width, rect.height, kind === 'frame' ? 5 : 3.6), 'edge');
     }
@@ -31,7 +31,7 @@ export function sampleUI(root: HTMLElement, viewportHeight: number, departing = 
       const checked = (element as HTMLInputElement).checked;
       const cx = rect.x + (checked ? rect.width - 9 : 9), cy = rect.y + rect.height / 2;
       const knob: Target[] = [];
-      for (let y = -4; y <= 4; y += 2) for (let x = -4; x <= 4; x += 2) knob.push({ x: cx + x, y: cy + y, size: .8 });
+      for (let y = -4; y <= 4; y += 2) for (let x = -4; x <= 4; x += 2) knob.push({ x: cx + x, y: cy + y, size: .8, theme: 'cool' as const, isUI: true });
       append(knob, 'knob'); return;
     }
     if (kind === 'range') {
@@ -58,7 +58,7 @@ export function sampleUI(root: HTMLElement, viewportHeight: number, departing = 
     const fontSize = parseFloat(style.fontSize);
     const layout = createTextLayout(text, { x: rect.x + left, y: rect.y + top, width: rect.width - left - right, height: rect.height - top - bottom, fontSize, nowrap: kind !== 'hero' && rect.height < fontSize * 2.6, weight: Math.max(500, Number(style.fontWeight) || 500), dotMatrix: kind !== 'hero' && kind !== 'input-text', verticalAlign: input ? 'top' : 'center', align: style.textAlign === 'center' ? 'center' : 'left', fit: true });
     layouts.push(layout);
-    targets.push(...layout.targets.map(p => ({ ...p, key: `${key}-${p.key}`, size: p.size, opacity: disabled ? .28 : 1, delay: Number(element.dataset.particleDelay ?? 0) + (p.glyph ?? 0) * (kind === 'hero' ? 15 : 3) })));
+    targets.push(...layout.targets.map(p => ({ ...p, key: `${key}-${p.key}`, size: p.size, opacity: disabled ? .28 : 1, delay: Number(element.dataset.particleDelay ?? 0) + (p.glyph ?? 0) * (kind === 'hero' ? 15 : 3), theme: (kind === 'hero' ? 'warm' : 'cool') as 'warm' | 'cool', isUI: kind !== 'hero' })));
     exclusions.push(rect);
   });
   root.querySelectorAll<HTMLElement>('input,textarea,small,.eyebrow,.field-meta,.expiry-note,.preview-meta,footer').forEach(element => {
