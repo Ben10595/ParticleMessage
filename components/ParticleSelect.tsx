@@ -1,11 +1,13 @@
 'use client';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 
+import { useLinePresence } from './useLinePresence';
+
 interface Option { value: string; label: string; disabled?: boolean }
 interface Props { label: string; value: string; options: Option[]; disabled?: boolean; onChange: (value: string) => void }
 
 // A select-only combobox: focus stays on the trigger; options are announced via
-// aria-activedescendant. The popup uses DOM dots so it can cover the shared canvas.
+// aria-activedescendant. The popup keeps its contour mounted through the closing animation.
 export default function ParticleSelect({ label, value, options, disabled, onChange }: Props) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -17,6 +19,7 @@ export default function ParticleSelect({ label, value, options, disabled, onChan
   const [above, setAbove] = useState(false);
   const selected = options.findIndex(option => option.value === value);
   const expanded = open && !disabled;
+  const present = useLinePresence(expanded);
   function show() {
     const rect = trigger.current?.getBoundingClientRect();
     setAbove(Boolean(rect && innerHeight - rect.bottom < 270 && rect.top > innerHeight - rect.bottom));
@@ -63,7 +66,7 @@ export default function ParticleSelect({ label, value, options, disabled, onChan
     <button ref={trigger} type="button" role="combobox" aria-label={label} aria-expanded={expanded} aria-haspopup="listbox" aria-controls={`${id}-list`} aria-activedescendant={expanded ? `${id}-${active}` : undefined} disabled={disabled} data-particle="control" data-text={options[selected]?.label ?? value} className="select-trigger" onClick={() => expanded ? setOpen(false) : show()} onKeyDown={keydown}>
       {options[selected]?.label ?? value}<span className="dot-chevron" aria-hidden="true" />
     </button>
-    {expanded && <div ref={popup} id={`${id}-list`} role="listbox" aria-label={label} className={`select-options ${above ? 'opens-above' : ''}`} data-particle-overlay="true">
+    {present && <div aria-hidden={!expanded || undefined} inert={!expanded} ref={popup} id={`${id}-list`} role="listbox" aria-label={label} className={`select-options ${above ? 'opens-above' : ''} ${!expanded ? 'is-closing' : ''}`} data-particle-overlay="true">
       {options.map((option, index) => <div key={option.value} id={`${id}-${index}`} role="option" aria-selected={option.value === value} aria-disabled={option.disabled || undefined} data-index={index} className={`select-option ${index === active ? 'is-active' : ''}`} onPointerMove={() => { if (!option.disabled) setActive(index); }} onPointerDown={event => event.preventDefault()} onClick={() => choose(index)}>
         <span className="dot-label">{option.label}</span><span className="selection-dot" aria-hidden="true" />
       </div>)}

@@ -1,3 +1,26 @@
+# One-Line-Prüfung — 11. September 2026
+
+Die bestehende Next.js-Anwendung verwendet jetzt `lines/OneLineEngine.ts` über dieselben Komponenten und Abläufe. Routen, Passwort-/Sessionfunktionen, Supabase-Anbindung, Slugs, Nachrichtenformat, Timing, Editorzustand und Deployment-Konfiguration wurden nicht verändert. Die bisherige Partikel-Engine bleibt im Repository; der aktive Client importiert die Linien-Engine.
+
+## Aktuelle Prüfungen
+
+- TypeScript und ESLint: erfolgreich, keine Warnungen.
+- Unit-Tests: 25 bestanden. Neue Abdeckung für originale Strichschrift, deutsche Sonderzeichen, Emoji-Grapheme, Unicode-Fallback, mobile Textbegrenzung, Pfadlängen, unverändertes Satzzeichen-Timing bei Resize, Reduced Motion und vollständiges Engine-Cleanup.
+- Production Build: erfolgreich; bestehende dynamische Routen `/` und `/p/[slug]` erhalten.
+- Vollständige Browser-Suite: 28 bestanden, je 14 in Desktop Chrome und mobiler Chromium-Emulation (iPhone 13). Passwortfehler/Login, signierte HttpOnly/Secure/SameSite-Sitzung, Reload, Editorfunktionen, Emoji am Cursor, individuelle Timings, Reihenfolge/Löschung/Limits, alle Übergänge, Vorschau-Abbruch/-Rückkehr, Linkerzeugung/Kopieren, öffentliche Wiedergabe ohne Passwort, Fehler/Offline/Ablauf, Tastatur-Dropdowns, Resize, lange Texte, Canvas-Fallback und Reduced Motion geprüft.
+- Nach der letzten Anpassung der Fadenführung wurden die acht betroffenen Desktop-/Mobile-Tests zusätzlich erfolgreich wiederholt.
+- Supabase-Antworten werden in der automatisierten Browser-Suite simuliert.
+
+## Echte Speicherung und Sichtprüfung
+
+Über die bestehende lokale Anwendung wurde die neutrale Testnachricht „Schön, dass es dich gibt. ❤️“ tatsächlich gespeichert. Der erzeugte Slug `txR7z3dEIhzb` wurde über `/p/[slug]` geöffnet; Wiedergabe, Abschluss und Wiederholung funktionierten. Der Testdatensatz unterliegt dem vorhandenen 72-Stunden-Ablauf. Keine Daten wurden gelöscht, keine Migrationen ausgeführt.
+
+Startseite, Editor, Dropdown, Live-Vorschau, Erfolgsmeldung, öffentlicher Viewer und lange Nachrichten wurden visuell geprüft. Desktop- und mobile Screenshots entstehen in `test-results/`. Der freie Faden ist außerhalb der ruhenden Nachricht geführt. Das Branding überlagert im scrollenden Editor keine Eingabefelder.
+
+Die Engine arbeitet mit requestAnimationFrame, gespeicherter Geometrie und einem fortbestehenden Federzug; keine React-Zustandsänderungen pro Frame. Layoutmessungen erfolgen bei UI-Ereignissen, Scroll und Resize. DPR ist auf 2 begrenzt. Lokale Stichprobe im integrierten Browser: 144 FPS bei der ruhenden öffentlichen Ansicht. Das ist keine Garantie für andere Geräte; physische Smartphones und Bildschirmtastaturen wurden nicht getestet. Kein Deployment vorgenommen.
+
+---
+
 # Prüfprotokoll
 
 Stand: 10. September 2026. Gezielte Überarbeitung der bestehenden Oberfläche: eigene Dropdowns, Punktraster, Text-Sampling und Übergänge. Layout, Supabase-Integration und Nachrichtenschema unverändert.

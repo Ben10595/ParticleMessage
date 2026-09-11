@@ -1,9 +1,10 @@
 'use client';
 import { useRef, useState } from 'react';
 import { MAX_SLIDES, MAX_TEXT_LENGTH, EFFECTS, EFFECT_LABELS, WRITING_PRESETS, slideSettings, type Slide, type MessageSettings, type TransitionEffect, type WritingSettings } from '@/types/message';
-import type { ParticleEngine } from '@/particles/ParticleEngine';
+import type { OneLineEngine as ParticleEngine } from '@/lines/OneLineEngine';
 import LivePreview from './LivePreview';
 import ParticleSelect from './ParticleSelect';
+import { useLinePresence } from './useLinePresence';
 interface Props { previewActive: boolean; slides: Slide[]; settings: MessageSettings; engine: ParticleEngine | null; active: number; onSelect: (index: number) => void; onChange: (slides: Slide[]) => void; onPreview: () => void; onSave: () => void; busy: boolean; error: string }
 const emojis = ['❤️', '😂', '✨', '👀', '🥳', '🔥', '😊', '😭', '💀', '🤍', '🫶', '🌙'];
 const pauses = [
@@ -20,6 +21,7 @@ export default function ParticleEditor({ previewActive, slides, settings, engine
   const input = useRef<HTMLTextAreaElement>(null);
   const selection = useRef({ start: 0, end: 0 });
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const emojiPresent = useLinePresence(emojiOpen);
   function update(patch: Partial<Slide>) { onChange(slides.map((item, index) => index === active ? { ...item, ...patch } : item)); }
   function write(patch: Partial<WritingSettings>) { update({ writing: { ...writing, ...patch } }); }
   function move(direction: number) {
@@ -47,7 +49,7 @@ export default function ParticleEditor({ previewActive, slides, settings, engine
       </nav>
       <div className="field-meta"><label data-particle="text" htmlFor="message-text">ABSCHNITT {String(active + 1).padStart(2, '0')}</label><span data-particle="text">{Array.from(slide.text).length} / {MAX_TEXT_LENGTH}</span></div>
       <div data-particle="frame" className="text-field"><textarea ref={input} onSelect={event => { selection.current = { start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd }; }} onBlur={event => { selection.current = { start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd }; }} onKeyDown={event => { if (event.key.length === 1 || event.key === 'Backspace' || event.key === 'Enter') engine?.emitTypingFlow(input.current?.getBoundingClientRect(), null); }} id="message-text" value={slide.text} placeholder="Was du schon immer sagen wolltest …" disabled={busy} onChange={event => { update({ text: Array.from(event.target.value).slice(0, MAX_TEXT_LENGTH).join('') }); engine?.emitTypingFlow(input.current?.getBoundingClientRect(), null); }} /></div>
-      <div className="text-toolbar"><div className="emoji-control"><button data-particle="button" aria-expanded={emojiOpen} aria-controls="emoji-picker" onClick={() => setEmojiOpen(!emojiOpen)} disabled={busy}>☺ Emoji</button>{emojiOpen && <div data-particle="frame" className="emoji-picker" id="emoji-picker" aria-label="Emoji auswählen" onKeyDown={event => { if (event.key === 'Escape') { setEmojiOpen(false); input.current?.focus(); } }}>{emojis.map(emoji => <button key={emoji} aria-label={`${emoji} einfügen`} onMouseDown={event => event.preventDefault()} onClick={() => insertEmoji(emoji)}>{emoji}</button>)}</div>}</div>
+      <div className="text-toolbar"><div className="emoji-control"><button data-particle="button" aria-expanded={emojiOpen} aria-controls="emoji-picker" onClick={() => setEmojiOpen(!emojiOpen)} disabled={busy}>☺ Emoji</button>{emojiPresent && <div aria-hidden={!emojiOpen || undefined} inert={!emojiOpen} data-particle="frame" className={`emoji-picker ${!emojiOpen ? 'is-closing' : ''}`} id="emoji-picker" aria-label="Emoji auswählen" onKeyDown={event => { if (event.key === 'Escape') { setEmojiOpen(false); input.current?.focus(); } }}>{emojis.map(emoji => <button key={emoji} aria-label={`${emoji} einfügen`} onMouseDown={event => event.preventDefault()} onClick={() => insertEmoji(emoji)}>{emoji}</button>)}</div>}</div>
       <div className="slide-actions"><button data-particle="button" data-icon="left" aria-label="Abschnitt nach vorne" disabled={active === 0 || busy} onClick={() => move(-1)}>←</button><button data-particle="button" data-icon="arrow" aria-label="Abschnitt nach hinten" disabled={active === slides.length - 1 || busy} onClick={() => move(1)}>→</button><button data-particle="button" data-icon="close" aria-label="Abschnitt löschen" disabled={slides.length === 1 || busy} onClick={() => { onChange(slides.filter((_, index) => index !== active)); onSelect(Math.max(0, active - 1)); }}>×</button></div></div>
       <div data-particle="line" className="particle-divider" />
       <div className="settings-group">

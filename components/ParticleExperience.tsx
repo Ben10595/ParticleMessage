@@ -7,7 +7,7 @@ import ParticleViewer from './ParticleViewer';
 import PasswordGate from './PasswordGate';
 import Branding from './Branding';
 import { useParticleSurface } from './useParticleSurface';
-import type { ParticleEngine } from '@/particles/ParticleEngine';
+import type { OneLineEngine as ParticleEngine } from '@/lines/OneLineEngine';
 import { loadMessage, saveMessage, MessageExpiredError } from '@/lib/messages';
 import { DEFAULT_SETTINGS, slideSettings, validateMessage, type Slide, type MessageSettings } from '@/types/message';
 type View = 'password' | 'home' | 'editor' | 'loading' | 'playing' | 'ended' | 'success' | 'error';
@@ -130,10 +130,10 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
     catch { linkInput.current?.focus(); linkInput.current?.select(); setCopyStatus('Link markiert — bitte kopieren'); }
   }
   const showChrome = !slug && view !== 'playing' && view !== 'ended';
-  return <main className={`experience ${engine && !fallback ? 'canvas-ready' : ''} ${transitioning ? 'transitioning' : ''} ${!engine && !fallback ? 'canvas-pending' : ''}`} ref={surface} aria-busy={transitioning || busy} onKeyDownCapture={event => { if (transitioning) event.preventDefault(); }}>
+  return <main data-scene={view} className={`experience ${engine && !fallback ? 'canvas-ready' : ''} ${transitioning ? 'transitioning' : ''} ${!engine && !fallback ? 'canvas-pending' : ''}`} ref={surface} aria-busy={transitioning || busy} onKeyDownCapture={event => { if (transitioning) event.preventDefault(); }}>
     <ParticleCanvas onReady={setEngine} onError={onError} />
     {fallback && <p className="fallback-note" role="status">Canvas ist hier nicht verfügbar. Du kannst die Nachricht trotzdem schreiben, teilen und lesen.</p>}
-    {showChrome && <header className="masthead"><span data-particle="text" className="wordmark">PARTICLEMESSAGE</span>{view === 'editor' ? <button data-particle="button" className="back" disabled={busy} onClick={() => void transition('home')}>← Zurück</button> : <span data-particle="text" className="edition">WORTE IN BEWEGUNG</span>}</header>}
+    {showChrome && <header className="masthead"><span data-particle="text" className="wordmark">PARTICLEMESSAGE</span>{view === 'editor' ? <button data-particle="button" className="back" disabled={busy} onClick={() => void transition('home')}>← Zurück</button> : <span data-particle="text" className="edition">EINE LINIE. DEINE WORTE.</span>}</header>}
     {view === 'password' && <PasswordGate onUnlock={unlock} />}
     {view === 'home' && <section className="landing"><h1 data-particle="hero" data-particle-delay="500">Schreib etwas.</h1><button data-particle="button" data-particle-delay="1350" className="primary" onClick={() => void transition('editor')}>Nachricht erstellen</button></section>}
     {view === 'editor' && <ParticleEditor previewActive={!transitioning} engine={engine} settings={settings} slides={slides} active={active} onSelect={setActive} onChange={next => { setSlides(next); setError(''); }} onPreview={preview} onSave={() => void save()} busy={busy} error={error} />}

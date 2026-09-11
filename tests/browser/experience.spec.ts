@@ -75,7 +75,7 @@ test('public links play without password, with readable responsive text', async 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: `test-results/public-${testInfo.project.name}.png` });
 });
-test('missing, expired and offline messages have particle error scenes', async ({ page }) => {
+test('missing, expired and offline messages have line error scenes', async ({ page }) => {
   await mockMessage(page, new Date(Date.now() - 73 * 3600000).toISOString()); await page.goto('/p/expired12345');
   await expect(page.getByRole('heading', { name: 'Dieser Link ist abgelaufen.' })).toBeVisible();
   await page.route('**/rest/v1/messages*', route => route.fulfill({ status: 406, contentType: 'application/json', body: JSON.stringify({ code: 'PGRST116' }) }));
@@ -83,7 +83,7 @@ test('missing, expired and offline messages have particle error scenes', async (
   await page.route('**/rest/v1/messages*', route => route.fulfill({ status: 503, body: 'Unavailable' }));
   await page.reload(); await expect(page.getByRole('button', { name: 'Erneut versuchen' })).toBeVisible({ timeout: 20000 });
 });
-test('live preview uses writing, hold duration, and replays from same pool', async ({ page }, testInfo) => {
+test('live preview uses writing, hold duration, and the same line renderer', async ({ page }, testInfo) => {
   await unlock(page);
   await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Hi. A❤️');
   await page.getByRole('switch', { name: 'Schreibanimation' }).check();
@@ -94,10 +94,12 @@ test('live preview uses writing, hold duration, and replays from same pool', asy
   await expect(page.locator('canvas')).toHaveAttribute('data-visible-characters', '6');
   await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
   expect(await page.locator('canvas').count()).toBe(1);
-  expect(Number(await page.locator('canvas').getAttribute('data-ui-target-count'))).toBeGreaterThan(1000);
+  await expect(page.locator('canvas')).toHaveAttribute('data-renderer', 'one-line');
+  expect(Number(await page.locator('canvas').getAttribute('data-line-point-count'))).toBeLessThan(12000);
+  expect(Number(await page.locator('canvas').getAttribute('data-ui-target-count'))).toBeGreaterThan(100);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   if (testInfo.project.name === 'desktop') {
-    const brightestCores = await page.locator('.editor-heading h1, .section-heading > span:first-child').evaluateAll(elements => elements.map(element => {
+    const brightestCores = await page.locator('.preview-bounds').evaluateAll(elements => elements.map(element => {
       const rect = element.getBoundingClientRect();
       const canvas = document.querySelector('canvas')!;
       const dpr = canvas.width / innerWidth;
@@ -106,7 +108,7 @@ test('live preview uses writing, hold duration, and replays from same pool', asy
       for (let i = 0; i < pixels.length; i += 4) brightest = Math.max(brightest, pixels[i]);
       return brightest;
     }));
-    for (const core of brightestCores) expect(core).toBeGreaterThanOrEqual(240);
+    for (const core of brightestCores) expect(core).toBeGreaterThanOrEqual(220);
   }
   await page.screenshot({ path: `test-results/editor-${testInfo.project.name}.png` });
   await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'dispersing', { timeout: 8000 });
@@ -174,8 +176,8 @@ test('150-character message wraps legibly within desktop and mobile canvas', asy
   const text = 'Manchmal braucht es nur ein paar Worte. Danke, dass du immer für mich da bist. Du machst meine Welt ein bisschen heller. Schön, dass es dich gibt. ❤️';
   await mockMessage(page, new Date().toISOString(), { version: 1, slides: [{ text, duration: 10000 }] });
   await page.goto('/p/longText1234');
-  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
   await expect(page.locator('.viewer-text')).toHaveText(text);
+  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: `test-results/long-text-${testInfo.project.name}.png` });
 });
@@ -198,7 +200,7 @@ test('custom selects support keyboard navigation, escape, typeahead and outside 
   await expect(page.locator('select')).toHaveCount(0);
 });
 
-test('edit debounce, long unbroken text and scene departure retain the editor until particles leave', async ({ page }, testInfo) => {
+test('edit debounce, long text and scene departure retain the editor during line retraction', async ({ page }, testInfo) => {
   await unlock(page);
   const input = page.getByRole('textbox', { name: 'ABSCHNITT 01' });
   await input.fill('Ein ruhiger Anfang.');

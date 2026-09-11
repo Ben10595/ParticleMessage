@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import type { ParticleEngine } from '@/particles/ParticleEngine';
+import type { OneLineEngine as ParticleEngine } from '@/lines/OneLineEngine';
 import { slideSettings, type Slide, type MessageSettings } from '@/types/message';
 export default function LivePreview({ active, engine, slide, settings }: { active: boolean; engine: ParticleEngine | null; slide: Slide; settings: MessageSettings }) {
   const bounds = useRef<HTMLDivElement>(null);
@@ -32,6 +32,6 @@ export default function LivePreview({ active, engine, slide, settings }: { activ
     <div className="preview-meta"><span data-particle="text">SO KOMMEN DEINE WORTE AN</span><button data-particle="button" aria-label="Abschnitt erneut abspielen" onClick={() => setReplay(n => n + 1)}>↻</button></div>
     <div data-particle="line" className="particle-divider" />
     <div className="preview-bounds" ref={bounds}><p className={engine ? 'sr-only' : 'live-fallback'}>{text || 'Deine Worte.'}</p></div>
-    <p data-particle="text" className="preview-caption">Ein Gedanke. Tausend kleine Punkte.</p>
+    <p data-particle="text" className="preview-caption">Ein Gedanke. Eine einzige Linie.</p>
   </aside>;
 }

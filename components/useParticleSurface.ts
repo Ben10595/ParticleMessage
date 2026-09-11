@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, type RefObject } from 'react';
-import type { ParticleEngine } from '@/particles/ParticleEngine';
+import type { OneLineEngine as ParticleEngine } from '@/lines/OneLineEngine';
 export function useParticleSurface(engine: ParticleEngine | null, surface: RefObject<HTMLElement | null>, scene: string, suspended = false) {
   useEffect(() => {
     const root = surface.current;
@@ -12,7 +12,7 @@ export function useParticleSurface(engine: ParticleEngine | null, surface: RefOb
     };
     timer = window.setTimeout(() => engine.formUI(root), scene === 'home' || scene === 'password' ? 450 : 45);
     const mutation = new MutationObserver(update);
-    mutation.observe(root, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['disabled', 'aria-current', 'open', 'checked', 'data-text', 'aria-expanded', 'aria-selected'] });
+    mutation.observe(root, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['disabled', 'aria-current', 'open', 'checked', 'data-text', 'aria-expanded', 'aria-selected', 'aria-hidden'] });
     const resize = new ResizeObserver(() => engine.refresh());
     resize.observe(root);
     let lastHovered: HTMLElement | null = null;
