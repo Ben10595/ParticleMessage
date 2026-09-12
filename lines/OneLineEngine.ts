@@ -1,11 +1,12 @@
 import { graphemes, typingTimeline } from '../lib/playback';
-import { EFFECTS, type TransitionEffect, type WritingSettings } from '../types/message';
+import { DEFAULT_FONT, EFFECTS, type MessageFont, type TransitionEffect, type WritingSettings } from '../types/message';
 import { clamp, contour, ease, measure, pointAt, type Point } from './geometry';
 import { layoutLineText, type LineLayout } from './lineFont';
-import { inkProgress, scheduleStrokes } from './writing';
+import { entranceDuration, entranceFrame, inkProgress, scheduleStrokes } from './writing';
 
-interface FormOptions { bounds?: () => DOMRect; writing?: WritingSettings; effect?: TransitionEffect; finale?: boolean }
-interface Strand { ink?: boolean; effect?: TransitionEffect; key: string; points: Point[]; lengths: number[]; length: number; start: number; duration: number; opacity: number; width: number; retract?: number; retractDuration?: number; from?: number; fromPoints?: Point[]; fromLengths?: number[]; movedAt?: number; fallback?: { char: string; size: number }; element?: HTMLElement }
+interface FormOptions { bounds?: () => DOMRect; writing?: WritingSettings; effect?: TransitionEffect; finale?: boolean; font?: MessageFont }
+interface Entrance { start: number; x: number; y: number; size: number; index: number }
+interface Strand { entrance?: Entrance; ink?: boolean; effect?: TransitionEffect; key: string; points: Point[]; lengths: number[]; length: number; start: number; duration: number; opacity: number; width: number; retract?: number; retractDuration?: number; from?: number; fromPoints?: Point[]; fromLengths?: number[]; movedAt?: number; fallback?: { char: string; size: number }; element?: HTMLElement }
 interface Message { text: string; options: FormOptions; start: number; timeline: number[]; durations: number[]; layout: LineLayout; completion: number }
 const RETRACT = 580;
 /** Shared stroke rendering supplies contours and lettering. Native HTML
@@ -52,15 +53,16 @@ export class OneLineEngine {
       this.animateLayout = true;
     });
   };
-  private put(key: string, points: Point[], start: number, duration: number, opacity = .62, width = 1, element?: HTMLElement, fallback?: Strand['fallback'], ink = false, effect?: TransitionEffect) {
+  private put(key: string, points: Point[], start: number, duration: number, opacity = .62, width = 1, element?: HTMLElement, fallback?: Strand['fallback'], ink = false, effect?: TransitionEffect, entrance?: Entrance) {
     const old = this.strands.get(key), metrics = measure(points);
     const moved = this.animateLayout && old && old.points.length === points.length && old.points.some((p, i) => Math.hypot(p.x - points[i].x, p.y - points[i].y) > .5);
-    this.strands.set(key, { key, ink, effect, points, ...metrics, start: old && old.retract === undefined ? old.start : start, duration: old && old.retract === undefined ? old.duration : duration, opacity, width, element, fallback,
+    this.strands.set(key, { key, ink, effect, entrance, points, ...metrics, start: old && old.retract === undefined ? old.start : start, duration: old && old.retract === undefined ? old.duration : duration, opacity, width, element, fallback,
       fromPoints: this.animateLayout ? moved ? old.points : old?.fromPoints : undefined, fromLengths: moved ? old.lengths : old?.fromLengths, movedAt: moved ? this.time : old?.movedAt });
   }
   private progress(s: Strand) {
     if (this.reducedMotion) return s.retract === undefined ? 1 : 0;
     if (s.retract !== undefined) return (s.from ?? 1) * (1 - ease((this.time - s.retract) / (s.retractDuration ?? RETRACT)));
+    if (s.entrance && (s.effect === 'typewriter' || s.effect === 'fade')) return this.time >= s.entrance.start ? 1 : 0;
     const progress = (this.time - s.start) / Math.max(1, s.duration);
     return s.ink ? inkProgress(progress, s.effect) : ease(progress);
   }
@@ -125,7 +127,10 @@ export class OneLineEngine {
   }
   formText(text: string, options: FormOptions | boolean = {}): number {
     const opts = typeof options === 'boolean' ? {} : { ...options };
-    if (opts.effect === 'random') opts.effect = EFFECTS[Math.floor(Math.random() * (EFFECTS.length - 1))];
+    if (opts.effect === 'random') {
+      const choices = EFFECTS.filter(effect => effect !== 'random');
+      opts.effect = choices[Math.floor(Math.random() * choices.length)];
+    }
     const previous = [...this.strands.values()].filter(s => s.key.startsWith('text-'));
     for (const s of previous) {
       this.strands.delete(s.key); s.key = `out-${s.key}-${this.time}`; this.strands.set(s.key, s);
@@ -141,7 +146,7 @@ export class OneLineEngine {
       // A pause belongs after the completed glyph, not inside its pen strokes.
       return this.reducedMotion ? 0 : Math.max(1, Math.min(slot, typing ? opts.writing!.speed : slot) * .92);
     });
-    const completion = this.reducedMotion ? 0 : (timeline.at(-1) ?? 0) + (durations.at(-1) ?? 0) + 120;
+    const completion = this.reducedMotion ? 0 : (timeline.at(-1) ?? 0) + Math.max(durations.at(-1) ?? 0, entranceDuration(opts.effect)) + 120;
     const message: Message = { text, options: opts, start, timeline, durations, layout: { glyphs: [], fontSize: 0, lineCount: 0, height: 0 }, completion };
     this.message = message; this.layoutMessage(message); this.canvas.dataset.phase = this.reducedMotion ? 'holding' : 'forming';
     return this.reducedMotion ? 0 : start - this.time + completion;
@@ -149,14 +154,17 @@ export class OneLineEngine {
   private layoutMessage(message: Message) {
     const rect = message.options.bounds?.();
     const box = rect ?? { x: this.width * .09, y: this.height * .2, width: this.width * .82, height: this.height * .6 };
-    const layout = message.layout = layoutLineText(message.text, box, Math.min(rect ? 48 : 96, box.width / (rect ? 7 : 9)));
+    const layout = message.layout = layoutLineText(message.text, box, Math.min(rect ? 48 : 96, box.width / (rect ? 7 : 9)), 'center', message.options.font);
     for (const g of layout.glyphs) {
       const offset = message.timeline[g.index] ?? 0;
       const duration = message.durations[g.index] ?? 0;
       const strokes = scheduleStrokes(g.paths, duration);
-      g.paths.forEach((points, i) => this.put(`text-${g.index}-${i}`, points, message.start + offset + strokes[i].offset, strokes[i].duration, 1, Math.max(1.15, layout.fontSize / 48), undefined, undefined, true, message.options.effect));
-      if (g.fallback) this.put(`text-${g.index}-emoji`, [{ x: g.x, y: g.y }], message.start + offset, duration, 1, 1, undefined, { char: g.char, size: layout.fontSize });
+      const entrance = { start: message.start + offset, x: g.x + g.width / 2, y: g.y + layout.fontSize * .45, size: layout.fontSize, index: g.index };
+      g.paths.forEach((points, i) => this.put(`text-${g.index}-${i}`, points, message.start + offset + strokes[i].offset, strokes[i].duration, 1, Math.max(1.15, layout.fontSize / 48), undefined, undefined, true, message.options.effect, entrance));
+      if (g.fallback) this.put(`text-${g.index}-emoji`, [{ x: g.x, y: g.y }], message.start + offset, duration, 1, 1, undefined, { char: g.char, size: layout.fontSize }, false, message.options.effect, entrance);
     }
+    this.canvas.dataset.textFont = message.options.font ?? DEFAULT_FONT;
+    this.canvas.dataset.textEffect = message.options.effect ?? 'morph';
     this.canvas.dataset.textFontSize = String(layout.fontSize); this.canvas.dataset.textLineCount = String(layout.lineCount); this.stats();
   }
   disperseText(_strength = .8) {
@@ -182,12 +190,22 @@ export class OneLineEngine {
   }
   private trace(s: Strand, progress: number, alpha = s.opacity) {
     const ctx = this.ctx;
+    const entrance = s.entrance;
+    const motion = entranceFrame(s.effect, !entrance || this.reducedMotion ? 1 : (this.time - entrance.start) / Math.max(1, entranceDuration(s.effect)), entrance?.index);
+    const transform = (p: Point): Point => {
+      if (!entrance) return p;
+      const x = (p.x - entrance.x) * motion.scale, y = (p.y - entrance.y) * motion.scale;
+      return { x: entrance.x + x * Math.cos(motion.rotation) - y * Math.sin(motion.rotation) + motion.x * entrance.size, y: entrance.y + x * Math.sin(motion.rotation) + y * Math.cos(motion.rotation) + motion.y * entrance.size };
+    };
+    alpha *= motion.opacity;
     const moving = !this.reducedMotion && s.fromPoints && s.movedAt !== undefined && this.time - s.movedAt < 500;
     const blend = moving ? 1 - Math.exp(-7 * clamp((this.time - s.movedAt!) / 500)) * Math.cos(clamp((this.time - s.movedAt!) / 500) * 7) : 1;
     const position = (p: Point, i: number): Point => moving ? { x: s.fromPoints![i].x + (p.x - s.fromPoints![i].x) * blend, y: s.fromPoints![i].y + (p.y - s.fromPoints![i].y) * blend } : p;
     if (s.fallback) {
-      ctx.globalAlpha = alpha * progress; ctx.font = `${s.fallback.size}px -apple-system, sans-serif`; ctx.textBaseline = 'top'; ctx.fillStyle = '#f2f2ed';
-      ctx.fillText(s.fallback.char, s.points[0].x, s.points[0].y); return s.points[0];
+      const p = transform(s.points[0]);
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(motion.rotation);
+      ctx.globalAlpha = alpha * progress; ctx.font = `${s.fallback.size * motion.scale}px -apple-system, sans-serif`; ctx.textBaseline = 'top'; ctx.fillStyle = '#f2f2ed';
+      ctx.fillText(s.fallback.char, 0, 0); ctx.restore(); return p;
     }
     const distance = s.length * progress;
     let tip = pointAt(s.points, s.lengths, distance);
@@ -195,8 +213,9 @@ export class OneLineEngine {
       const oldTip = pointAt(s.fromPoints!, s.fromLengths, (s.fromLengths.at(-1) ?? 0) * progress);
       tip = { x: oldTip.x + (tip.x - oldTip.x) * blend, y: oldTip.y + (tip.y - oldTip.y) * blend };
     }
-    ctx.globalAlpha = alpha; ctx.lineWidth = s.width; ctx.beginPath(); const first = position(s.points[0], 0); ctx.moveTo(first.x, first.y);
-    for (let i = 1; i < s.points.length && s.lengths[i] < distance; i++) { const p = position(s.points[i], i); ctx.lineTo(p.x, p.y); }
+    tip = transform(tip);
+    ctx.globalAlpha = alpha; ctx.lineWidth = s.width; ctx.beginPath(); const first = transform(position(s.points[0], 0)); ctx.moveTo(first.x, first.y);
+    for (let i = 1; i < s.points.length && s.lengths[i] < distance; i++) { const p = transform(position(s.points[i], i)); ctx.lineTo(p.x, p.y); }
     ctx.lineTo(tip.x, tip.y); ctx.stroke(); return tip;
   }
   private tick = (now: number) => {
@@ -215,9 +234,11 @@ export class OneLineEngine {
       if (progress <= 0) continue;
       visible.push({ strand: s, progress });
       if (progress < 1 || s.retract !== undefined) drawing = true;
-      if (s.ink && !s.fallback && s.retract === undefined && progress < 1 && s.start > latestStart) { tip = pointAt(s.points, s.lengths, s.length * progress); latestStart = s.start; }
     }
-    for (const { strand, progress } of visible) this.trace(strand, progress);
+    for (const { strand, progress } of visible) {
+      const end = this.trace(strand, progress);
+      if (strand.ink && !strand.fallback && strand.retract === undefined && progress < 1 && strand.start > latestStart) { tip = end; latestStart = strand.start; }
+    }
     if (tip && drawing && !this.reducedMotion) {
       // The only writing cursor is the tip of the stroke currently being drawn.
       // It lifts between strokes and never leaves a bar or connecting trail.

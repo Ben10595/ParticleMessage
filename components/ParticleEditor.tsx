@@ -1,9 +1,10 @@
 'use client';
 import { useRef, useState } from 'react';
-import { MAX_SLIDES, MAX_TEXT_LENGTH, EFFECTS, EFFECT_LABELS, WRITING_PRESETS, slideSettings, type Slide, type MessageSettings, type TransitionEffect, type WritingSettings } from '@/types/message';
+import { MAX_SLIDES, MAX_TEXT_LENGTH, EFFECTS, EFFECT_LABELS, EFFECT_DESCRIPTIONS, FONTS, FONT_LABELS, WRITING_PRESETS, slideSettings, type Slide, type MessageSettings, type TransitionEffect, type WritingSettings, type MessageFont } from '@/types/message';
 import type { OneLineEngine as ParticleEngine } from '@/lines/OneLineEngine';
 import LivePreview from './LivePreview';
 import ParticleSelect from './ParticleSelect';
+import FontSample from './FontSample';
 import { useLinePresence } from './useLinePresence';
 interface Props { previewActive: boolean; slides: Slide[]; settings: MessageSettings; engine: ParticleEngine | null; active: number; onSelect: (index: number) => void; onChange: (slides: Slide[]) => void; onPreview: () => void; onSave: () => void; busy: boolean; error: string }
 const emojis = ['❤️', '😂', '✨', '👀', '🥳', '🔥', '😊', '😭', '💀', '🤍', '🫶', '🌙'];
@@ -17,7 +18,7 @@ const pauses = [
 ] as const;
 export default function ParticleEditor({ previewActive, slides, settings, engine, active, onSelect, onChange, onPreview, onSave, busy, error }: Props) {
   const slide = slides[active];
-  const { writing, effect } = slideSettings(slide, settings);
+  const { writing, effect, font } = slideSettings(slide, settings);
   const input = useRef<HTMLTextAreaElement>(null);
   const selection = useRef({ start: 0, end: 0 });
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -53,7 +54,9 @@ export default function ParticleEditor({ previewActive, slides, settings, engine
       <div className="slide-actions"><button data-particle="button" data-icon="left" aria-label="Abschnitt nach vorne" disabled={active === 0 || busy} onClick={() => move(-1)}>←</button><button data-particle="button" data-icon="arrow" aria-label="Abschnitt nach hinten" disabled={active === slides.length - 1 || busy} onClick={() => move(1)}>→</button><button data-particle="button" data-icon="close" aria-label="Abschnitt löschen" disabled={slides.length === 1 || busy} onClick={() => { onChange(slides.filter((_, index) => index !== active)); onSelect(Math.max(0, active - 1)); }}>×</button></div></div>
       <div data-particle="line" className="particle-divider" />
       <div className="settings-group">
-        <div className="control-row"><span data-particle="text">Übergang</span><ParticleSelect label="Übergang dieses Abschnitts" value={effect} disabled={busy} onChange={value => update({ effect: value as TransitionEffect })} options={EFFECTS.map(value => ({ value, label: EFFECT_LABELS[value] }))} /></div>
+        <div className="control-row"><span data-particle="text">Schriftart</span><ParticleSelect label="Schriftart dieses Abschnitts" value={font} disabled={busy} onChange={value => update({ font: value as MessageFont })} options={FONTS.map(value => ({ value, label: FONT_LABELS[value], preview: <FontSample font={value} /> }))} /></div>
+        <div className="control-row"><span data-particle="text">Animation</span><ParticleSelect label="Animation dieses Abschnitts" value={effect} disabled={busy} onChange={value => update({ effect: value as TransitionEffect })} options={EFFECTS.map(value => ({ value, label: EFFECT_LABELS[value] }))} /></div>
+        <p className="effect-description">{EFFECT_DESCRIPTIONS[effect]}</p>
         <div className="control-row"><span data-particle="text">Fertigen Text halten</span><ParticleSelect label="Dauer des fertigen Textes" value={String(slide.duration)} disabled={busy} onChange={value => update({ duration: Number(value) })} options={Array.from({ length: 19 }, (_, i) => 1000 + i * 500).map(duration => ({ value: String(duration), label: `${(duration / 1000).toLocaleString('de-DE')} Sekunden` }))} /></div>
         <label className="control-row"><span data-particle="text">Schreibanimation</span><input data-particle="switch" className="switch" type="checkbox" role="switch" aria-label="Schreibanimation" checked={writing.enabled} disabled={busy} onChange={event => write({ enabled: event.target.checked })} /></label>
         {writing.enabled && <div className="control-row"><span data-particle="text">Schreibrhythmus</span><ParticleSelect label="Schreibrhythmus" disabled={busy} value={preset} onChange={value => { const p = WRITING_PRESETS[value as keyof typeof WRITING_PRESETS]; if (p) write(p); }} options={[{ value: 'Eigene Werte', label: 'Eigene Werte', disabled: true }, ...Object.keys(WRITING_PRESETS).map(value => ({ value, label: value }))]} /></div>}

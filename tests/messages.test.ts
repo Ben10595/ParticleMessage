@@ -1,9 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateMessage } from '../types/message';
+import { DEFAULT_FONT, DEFAULT_SETTINGS, EFFECTS, FONTS, slideSettings, validateMessage } from '../types/message';
 import { generateSlug, insertWithRetry, SLUG_PATTERN } from '../lib/messages';
 import { wrapText } from '../particles/textSampler';
 const valid = { version: 1 as const, slides: [{ text: ' Na du 👋 ', duration: 2200 }] };
+test('fonts and animations survive validation and saving, with compatible legacy defaults', async () => {
+  assert.equal(slideSettings(valid.slides[0]).font, DEFAULT_FONT);
+  assert.equal(slideSettings(valid.slides[0], { ...DEFAULT_SETTINGS, font: 'mono' }).font, 'mono');
+  assert.equal(slideSettings({ ...valid.slides[0], font: 'classic' }, { ...DEFAULT_SETTINGS, font: 'mono' }).font, 'classic');
+  for (const font of FONTS) for (const effect of EFFECTS) {
+    const content = { version: 1 as const, slides: [{ text: 'Hallo ❤️', duration: 1000, font, effect }], settings: { ...DEFAULT_SETTINGS, font } };
+    const serialized = JSON.parse(JSON.stringify(content));
+    assert.deepEqual(validateMessage(serialized), content);
+    await insertWithRetry(content, async (_slug, saved) => { assert.deepEqual(saved, content); return { error: null }; });
+  }
+  for (const font of [null, '', 'comic', 1, {}, ['mono']]) {
+    assert.throws(() => validateMessage({ ...valid, slides: [{ ...valid.slides[0], font }] }), /Schriftart/);
+    assert.throws(() => validateMessage({ ...valid, settings: { ...DEFAULT_SETTINGS, font } }), /Schriftart/);
+  }
+});
 test('validates and normalizes the versioned message format', () => {
   assert.deepEqual(validateMessage(valid), { version: 1, slides: [{ text: 'Na du 👋', duration: 2200 }] });
   for (const value of [null, {}, { version: 2, slides: valid.slides }, { version: 1, slides: [] }, { version: 1, slides: Array(16).fill(valid.slides[0]) }, { version: 1, slides: [{ text: ' ', duration: 2000 }] }, { version: 1, slides: [{ text: 'a'.repeat(151), duration: 2000 }] }, { version: 1, slides: [{ text: 'hello', duration: NaN }] }, { version: 1, slides: [{ text: 'hello', duration: 999 }] }, { version: 1, slides: [{ text: 'hello', duration: 10001 }] }]) assert.throws(() => validateMessage(value));

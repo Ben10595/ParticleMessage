@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { FONTS, FONT_LABELS, type MessageContent } from '../../types/message';
 async function select(page: Page, label: string, option: string) {
   await page.getByRole('combobox', { name: label, exact: true }).click();
   await page.getByRole('option', { name: option, exact: true }).click();
@@ -14,6 +15,56 @@ async function unlock(page: Page) {
 async function mockMessage(page: Page, createdAt = new Date().toISOString(), message: unknown = content) {
   await page.route('**/rest/v1/messages*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ content: message, created_at: createdAt }) }));
 }
+test('font and animation choices preview, follow their section and survive the shared link', async ({ page }, testInfo) => {
+  test.setTimeout(70000);
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await unlock(page);
+  await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Deine Worte. Äöü ❤️');
+  await select(page, 'Dauer des fertigen Textes', '10 Sekunden');
+  const canvas = page.locator('canvas');
+  for (const font of FONTS) {
+    await select(page, 'Schriftart dieses Abschnitts', FONT_LABELS[font]);
+    await expect(canvas).toHaveAttribute('data-text-font', font);
+    await expect(canvas).toHaveAttribute('data-phase', 'holding');
+    await page.getByLabel('Live-Vorschau').scrollIntoViewIfNeeded();
+    await page.getByLabel('Live-Vorschau').screenshot({ path: `test-results/font-${font}-${testInfo.project.name}.png` });
+  }
+  await select(page, 'Schriftart dieses Abschnitts', 'Editorial');
+  await select(page, 'Animation dieses Abschnitts', 'Aufblühen');
+  await expect(canvas).toHaveAttribute('data-text-font', 'editorial');
+  await expect(canvas).toHaveAttribute('data-text-effect', 'bloom');
+  await page.getByRole('button', { name: 'Abschnitt hinzufügen', exact: true }).click();
+  await page.getByRole('textbox', { name: 'ABSCHNITT 02' }).fill('Zweiter Gedanke.');
+  await expect(page.getByRole('combobox', { name: 'Schriftart dieses Abschnitts' })).toHaveText('Handschrift');
+  await select(page, 'Schriftart dieses Abschnitts', 'Mono');
+  await select(page, 'Animation dieses Abschnitts', 'Schreibmaschine');
+  await page.getByRole('button', { name: 'Abschnitt nach vorne' }).click();
+  await expect(page.getByRole('combobox', { name: 'Schriftart dieses Abschnitts' })).toHaveText('Mono');
+  await page.getByRole('button', { name: 'Abschnitt 2', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Schriftart dieses Abschnitts' })).toHaveText('Editorial');
+  await expect(page.getByRole('combobox', { name: 'Animation dieses Abschnitts' })).toHaveText('Aufblühen');
+  let saved: MessageContent | undefined;
+  await page.route('**/rest/v1/messages*', async route => {
+    if (route.request().method() === 'POST') {
+      saved = route.request().postDataJSON().content;
+      await route.fulfill({ status: 201, body: '' });
+    } else await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ content: saved, created_at: new Date().toISOString() }) });
+  });
+  await page.getByRole('button', { name: 'Link erstellen', exact: true }).click();
+  const link = page.getByRole('textbox', { name: 'Link zu deiner Nachricht' });
+  await expect(link).toBeVisible();
+  expect(saved?.slides).toMatchObject([{ font: 'mono', effect: 'typewriter' }, { font: 'editorial', effect: 'bloom' }]);
+  await page.goto(await link.inputValue());
+  await expect(page.locator('.viewer-text')).toHaveText('Zweiter Gedanke.');
+  await expect(canvas).toHaveAttribute('data-text-font', 'mono');
+  await expect(canvas).toHaveAttribute('data-text-effect', 'typewriter');
+  await expect(page.locator('.viewer-text')).toHaveText('Deine Worte. Äöü ❤️', { timeout: 10000 });
+  await expect(canvas).toHaveAttribute('data-text-font', 'editorial');
+  await expect(canvas).toHaveAttribute('data-text-effect', 'bloom');
+  await expect(canvas).toHaveAttribute('data-phase', 'holding');
+  await page.screenshot({ path: `test-results/styled-message-${testInfo.project.name}.png` });
+  expect(errors).toEqual([]);
+});
 test('password rejection, signed httpOnly session, reload, and shared canvas across scenes', async ({ page, context }) => {
   await page.goto('/');
   const canvas = await page.locator('canvas').elementHandle();
@@ -43,7 +94,7 @@ test('per-slide writing, emoji insertion at cursor, ordering, preview, save and 
   await select(page, 'Schreibrhythmus', 'Ruhig');
   await page.getByText('Timing verfeinern +', { exact: true }).click();
   await page.getByLabel('Fragezeichen ?', { exact: true }).fill('1000');
-  await select(page, 'Übergang dieses Abschnitts', 'Wave');
+  await select(page, 'Animation dieses Abschnitts', 'Welle');
   await page.getByRole('button', { name: 'Abschnitt hinzufügen', exact: true }).click();
   await page.getByRole('textbox', { name: 'ABSCHNITT 02' }).fill('Du bist wunderbar. ✨');
   await expect(page.getByRole('switch', { name: 'Schreibanimation' })).not.toBeChecked();
@@ -142,7 +193,8 @@ test('writing retains punctuation pause and graphemes across resize', async ({ p
   await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
 });
 test('all transitions play and finish without canvas resets', async ({ page }) => {
-  const effects = ['morph', 'scatter', 'wave', 'vortex', 'rain', 'implode', 'random'];
+  test.setTimeout(70000);
+  const effects = ['morph', 'scatter', 'wave', 'vortex', 'rain', 'implode', 'fade', 'rise', 'bloom', 'typewriter', 'random'];
   await mockMessage(page, new Date().toISOString(), { version: 1, slides: effects.map(effect => ({ text: effect, effect, duration: 1000 })) });
   await page.goto('/p/allEffects12');
   const canvas = await page.locator('canvas').elementHandle();
@@ -185,15 +237,15 @@ test('150-character message wraps legibly within desktop and mobile canvas', asy
 
 test('custom selects support keyboard navigation, escape, typeahead and outside dismissal', async ({ page }) => {
   await unlock(page);
-  const combo = page.getByRole('combobox', { name: 'Übergang dieses Abschnitts' });
+  const combo = page.getByRole('combobox', { name: 'Animation dieses Abschnitts' });
   await combo.focus(); await combo.press('Enter');
-  await expect(page.getByRole('option', { name: 'Smooth Morph' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('option', { name: 'Linienfluss' })).toHaveAttribute('aria-selected', 'true');
   await combo.press('ArrowDown'); await combo.press('Enter');
-  await expect(combo).toHaveText('Scatter');
+  await expect(combo).toHaveText('Verstreut');
   await combo.press('Enter'); await combo.press('End'); await combo.press('Escape');
-  await expect(combo).toHaveText('Scatter'); await expect(combo).toBeFocused();
-  await combo.press('w'); await combo.press('a'); await combo.press('Enter');
-  await expect(combo).toHaveText('Wave');
+  await expect(combo).toHaveText('Verstreut'); await expect(combo).toBeFocused();
+  await combo.press('w'); await combo.press('e'); await combo.press('Enter');
+  await expect(combo).toHaveText('Welle');
   await combo.click(); await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).click();
   await expect(page.getByRole('listbox')).toHaveCount(0);
   await combo.click(); await combo.press('Tab'); await expect(combo).not.toBeFocused();

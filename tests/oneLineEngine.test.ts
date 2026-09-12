@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { OneLineEngine } from '../lines/OneLineEngine';
-import { WRITING_PRESETS } from '../types/message';
+import { EFFECTS, FONTS, WRITING_PRESETS } from '../types/message';
 
 test('line renderer preserves punctuation timing on resize, retracts, and cleans up its animation', async () => {
   const original = new Map<string, PropertyDescriptor | undefined>();
@@ -20,7 +20,7 @@ test('line renderer preserves punctuation timing on resize, retracts, and cleans
   mock('requestAnimationFrame', (fn: FrameRequestCallback) => { frames.set(++frameId, fn); return frameId; });
   mock('cancelAnimationFrame', (id: number) => frames.delete(id));
   let strokes = 0;
-  const ctx = { setTransform() {}, fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, quadraticCurveTo() {}, bezierCurveTo() {}, arc() {}, fill() {}, fillText() {}, stroke() { strokes++; } };
+  const ctx = { save() {}, restore() {}, translate() {}, rotate() {}, setTransform() {}, fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, quadraticCurveTo() {}, bezierCurveTo() {}, arc() {}, fill() {}, fillText() {}, stroke() { strokes++; } };
   const canvas = { width: 0, height: 0, dataset: {} as Record<string, string>, getContext: () => ctx } as unknown as HTMLCanvasElement;
   let engine: OneLineEngine | undefined;
   try {
@@ -35,6 +35,13 @@ test('line renderer preserves punctuation timing on resize, retracts, and cleans
     assert.ok(strokes > 50, 'letters are drawn as paths');
     engine.disperseText(); tick(700); assert.equal(canvas.dataset.phase, 'holding');
     const beforeIdle = strokes; tick(1000); assert.equal(strokes, beforeIdle, 'no stray line remains after the text retracts');
+    for (const font of FONTS) for (const effect of EFFECTS) {
+      const duration = engine.formText('Ä. Hi ❤️', { font, effect, writing: { enabled: true, ...WRITING_PRESETS.Schnell } });
+      tick(duration + 20);
+      assert.equal(canvas.dataset.textFont, font);
+      assert.equal(canvas.dataset.phase, 'holding', `${font}/${effect} settles before its hold time starts`);
+      assert.notEqual(canvas.dataset.textEffect, 'random');
+    }
     const controller = new AbortController(), cancelled = engine.wait(5000, controller.signal); controller.abort();
     await assert.rejects(cancelled, { name: 'AbortError' });
     const destroyed = engine.wait(10000); engine.destroy();
@@ -44,6 +51,10 @@ test('line renderer preserves punctuation timing on resize, retracts, and cleans
     engine = new OneLineEngine(canvas);
     assert.equal(engine.formText('Sofort. ❤️', { writing: { enabled: true, ...WRITING_PRESETS.Dramatisch } }), 0);
     tick(20); assert.equal(canvas.dataset.phase, 'holding');
+    for (const effect of EFFECTS) {
+      assert.equal(engine.formText('Ruhig ❤️', { font: 'editorial', effect }), 0);
+      tick(20); assert.equal(canvas.dataset.phase, 'holding');
+    }
     assert.throws(() => new OneLineEngine({ getContext: () => null } as unknown as HTMLCanvasElement), /Canvas/);
   } finally {
     engine?.destroy();

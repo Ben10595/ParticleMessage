@@ -85,3 +85,10 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:1px solid #c9
 @media(prefers-reduced-motion:reduce){.canvas-ready .masthead,.canvas-ready .branding{animation:none}.emoji-picker.is-closing{visibility:hidden}}
 
 [data-scene="editor"] .branding{position:absolute!important;bottom:16px}
+.select-value{display:flex;align-items:center;justify-content:space-between;gap:5px;flex:1;min-width:0}
+.font-sample{display:block;width:42px;height:27px;flex-shrink:0;color:#e4e9e1}
+.effect-description{font-size:11px;line-height:1.6;color:#8b978d;margin:0 0 9px;min-height:35px;max-width:38ch}
+[data-message-font="handwriting"]{font-family:"Segoe Print","Bradley Hand",cursive}
+[data-message-font="classic"]{font-family:Arial,sans-serif}
+[data-message-font="editorial"]{font-family:Georgia,serif}
+[data-message-font="mono"]{font-family:"Courier New",monospace}

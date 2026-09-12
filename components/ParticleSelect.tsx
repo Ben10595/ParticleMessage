@@ -1,9 +1,9 @@
 'use client';
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 
 import { useLinePresence } from './useLinePresence';
 
-interface Option { value: string; label: string; disabled?: boolean }
+interface Option { value: string; label: string; disabled?: boolean; preview?: ReactNode }
 interface Props { label: string; value: string; options: Option[]; disabled?: boolean; onChange: (value: string) => void }
 
 // A select-only combobox: focus stays on the trigger; options are announced via
@@ -64,11 +64,11 @@ export default function ParticleSelect({ label, value, options, disabled, onChan
   }
   return <div ref={root} className="particle-select" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
     <button ref={trigger} type="button" role="combobox" aria-label={label} aria-expanded={expanded} aria-haspopup="listbox" aria-controls={`${id}-list`} aria-activedescendant={expanded ? `${id}-${active}` : undefined} disabled={disabled} data-particle="control" data-text={options[selected]?.label ?? value} className="select-trigger" onClick={() => expanded ? setOpen(false) : show()} onKeyDown={keydown}>
-      {options[selected]?.label ?? value}<span className="dot-chevron" aria-hidden="true" />
+      <span className="select-value">{options[selected]?.label ?? value}{options[selected]?.preview}</span><span className="dot-chevron" aria-hidden="true" />
     </button>
     {present && <div aria-hidden={!expanded || undefined} inert={!expanded} ref={popup} id={`${id}-list`} role="listbox" aria-label={label} className={`select-options ${above ? 'opens-above' : ''} ${!expanded ? 'is-closing' : ''}`} data-particle-overlay="true">
       {options.map((option, index) => <div key={option.value} id={`${id}-${index}`} role="option" aria-selected={option.value === value} aria-disabled={option.disabled || undefined} data-index={index} className={`select-option ${index === active ? 'is-active' : ''}`} onPointerMove={() => { if (!option.disabled) setActive(index); }} onPointerDown={event => event.preventDefault()} onClick={() => choose(index)}>
-        <span className="dot-label">{option.label}</span><span className="selection-dot" aria-hidden="true" />
+        <span className="select-value"><span className="dot-label">{option.label}</span>{option.preview}</span><span className="selection-dot" aria-hidden="true" />
       </div>)}
     </div>}
   </div>;

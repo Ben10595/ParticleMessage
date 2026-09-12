@@ -1,3 +1,16 @@
+# Schriftauswahl und zusätzliche Animationen – 12. September 2026
+
+Vier Strichschriften (Handschrift, Klar, Editorial, Mono), Schriftproben im Menü und zehn Animationen plus Zufallsauswahl sind pro Abschnitt verfügbar. Die Auswahl wird in Vorschau, Gesamtwiedergabe und geteiltem Link übernommen. Bestehende Nachrichten ohne Schriftangabe bleiben lesbar.
+
+- `npm test`: 29 Tests bestanden. Neue Abdeckung: Schrift-/Animationskombinationen im validierten Speicherformat, ungültige Schriftwerte, alte Standardwerte, unterschiedliche Schriftgeometrie, mobile Umbrüche, konstante Mono-Abstände, exakt ruhende Eintrittsbewegungen und Reduced Motion für alle Effekte.
+- `npm run lint` und `npm run build`: erfolgreich, einschließlich TypeScript-Prüfung.
+- `npm run test:browser`: alle 30 Tests bestanden, 15 je Desktop und iPhone-13-Emulation. Neue Abdeckung: jede Schrift live auswählen, Abschnittseinstellungen beim Verschieben erhalten, speichern und im geteilten Link mit derselben Schrift/Animation abspielen; alle elf Animationsoptionen abschließen.
+- Sichtprüfung: Schriftproben im Dropdown, alle vier Vorschau-Schriften und die formatierte öffentliche Nachricht auf Desktop und Mobile. Screenshots unter `test-results/font-*.png` und `test-results/styled-message-*.png`.
+
+Supabase-Antworten wurden in den Browsertests simuliert. Keine entfernte Migration oder Veröffentlichung. Physische Smartphones wurden nicht getestet.
+
+---
+
 # One-Line-Prüfung — 11. September 2026
 
 Die bestehende Next.js-Anwendung verwendet jetzt `lines/OneLineEngine.ts` über dieselben Komponenten und Abläufe. Routen, Passwort-/Sessionfunktionen, Supabase-Anbindung, Slugs, Nachrichtenformat, Timing, Editorzustand und Deployment-Konfiguration wurden nicht verändert. Die bisherige Partikel-Engine bleibt im Repository; der aktive Client importiert die Linien-Engine.
