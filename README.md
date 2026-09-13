@@ -63,19 +63,66 @@ Keine neuen Environment Variables, Service-Role-Keys, Vercel-Cron-Endpunkte oder
 
 Grundlage: [Supabase Cron](https://supabase.com/docs/guides/cron/quickstart) und [restriktive RLS-Policies](https://supabase.com/docs/guides/database/postgres/row-level-security).
 
-## Schrift und Animation
+## Schrift und Partikel
 
-Der Editor bietet pro Abschnitt vier eigene Strichschriften: Handschrift, Klar, Editorial und Mono. Die Schriftproben im Menü verwenden dieselben Vektorpfade wie die Nachricht. Umlaute, Akzente und Satzzeichen sind enthalten; Emoji und andere Schriftsysteme werden als vollständige Unicode-Grapheme nativ gezeichnet. Lange Texte werden passend zum verfügbaren Platz umgebrochen und skaliert. Die Schrift verändert nur die Nachricht, nicht die Beschriftungen des Editors.
+Das bestehende Layout, die dunkle Farbwelt, die vier eigenen Schriftgeometrien und die offenen Editorflächen bleiben erhalten. Große Beschriftungen, Konturen, Nachrichtentexte, Emoji, Geschenk und Finale werden als Punkte gezeichnet. Kleine Beschriftungen und Eingabefelder bleiben für Lesbarkeit und Bedienbarkeit native HTML-Elemente. Umlaute, Akzente, Satzzeichen und Unicode-Grapheme bleiben erhalten; lange Texte werden passend zum verfügbaren Platz umgebrochen und skaliert.
 
-Zehn Animationen und eine Zufallsauswahl stehen zur Verfügung: Linienfluss, Verstreut, Wirbel, Welle, Regen, Zusammenziehen, Sanft einblenden, Aufsteigen, Aufblühen und Schreibmaschine. Die Effekte bewegen vollständige Buchstaben und kommen vor der eingestellten Haltezeit exakt zur Ruhe. Die Schreiboptionen bestimmen weiterhin Zeichengeschwindigkeit und getrennte Pausen für Komma, Punkt, Fragezeichen, Ausrufezeichen und Zeilenumbruch. Die Live-Vorschau übernimmt Änderungen nach 380 ms; die Gesamtvorschau und der geteilte Link verwenden dieselbe Engine und dieselben Einstellungen.
+16 Reveals plus Zufallsauswahl stehen pro Abschnitt zur Verfügung: Linienfluss, Verstreut, Wirbel, Welle, Regen, Zusammenziehen, Sanft einblenden, Aufsteigen, Aufblühen, Schreibmaschine, Explosion, Spirale, Magnet, Zoom von außen, Von links nach rechts und Punkte einsammeln. Gespeicherte ältere Effektnamen bleiben lesbar. Schreibgeschwindigkeit und getrennte Satzzeichenpausen bleiben konfigurierbar. Die Haltezeit beginnt erst nach dem vollständigen Formen.
 
-Gespeichert werden `slides[].font`, `slides[].effect`, `slides[].writing` und `slides[].duration`. Schrift und Schreiboptionen sind optional und werden beim Speichern und Laden validiert. Globale `settings`, alte Übergangsnamen und Formatversion 1 bleiben lesbar; Nachrichten ohne Schriftangabe verwenden Handschrift. Die vorhandene JSONB-Spalte `messages.content` genügt, eine Datenbankmigration ist dafür nicht erforderlich. Verschieben und Löschen von Abschnitten erhalten die jeweils zugehörigen Einstellungen.
+Die Live-Vorschau zeigt Schrift und Reveal mit dem bestehenden Debouncing. „Gesamtes Erlebnis testen“ bzw. „Vorschau“ spielt alle Abschnitte einschließlich ihrer Interaktionen und des Finales ab. Escape und × kehren mit erhaltenem Entwurf zum Editor zurück.
 
-## Linienrenderer
+## Optionale Erlebnisse
 
-Ein persistentes Canvas zeichnet Schriftzüge und Konturen aus gespeicherten Pfaden. Die Striche eines Buchstabens werden nach ihrer Länge nacheinander gezeichnet, mit kleinen Abhebepausen. Beim Auflösen ziehen sie sich zurück; es gibt keinen freien Hintergrundfaden und keine Verbindungslinien zwischen Buchstaben. Native HTML-Controls erhalten Tastaturbedienung und zugängliche Beschriftungen. Ohne Canvas bleiben Editor und Nachrichten als HTML mit passenden Systemschrift-Fallbacks nutzbar.
+Im Editor lassen sich unter „Diesen Abschnitt besonders machen“ die Extras je Abschnitt kombinieren. Die Reihenfolge ist **Rätsel → Geschenk → Reveal → Nachricht und Geheimnisse**. Nicht aktivierte Schritte werden übersprungen.
 
-Animationen laufen über requestAnimationFrame ohne React-Updates pro Zeichen. Schriftgeometrie wird pro Schrift und Zeichen zwischengespeichert, Layout bei Änderungen oder Resize berechnet. DPR ist auf 2 begrenzt; unsichtbare Tabs pausieren die Animationszeit. `prefers-reduced-motion` überspringt Schreiben und Eintrittsbewegung. Die Gesamtvorschau kehrt nach dem letzten Abschnitt automatisch zum Editor zurück.
+- **Gedrückt halten:** Touch, primäre Maustaste, Leertaste oder Enter sammeln die Punkte über etwa 2,6 Sekunden. Loslassen lässt sie langsamer zurückdriften. Vollständig enthüllt bleibt der Text für seine Haltezeit stabil. Pointer-Abbruch, Fokusverlust und Hintergrundwechsel lösen das Halten zuverlässig. Bei reduzierter Bewegung genügt ein bewusster Tipp oder Tastendruck.
+- **Rätsel:** Frage mit zwei bis vier unterschiedlichen Antworten und markierter richtiger Lösung oder Zahlencode mit zwei bis acht Ziffern. Führende Nullen bleiben erhalten. Falsche Antworten lassen beliebig viele weitere Versuche zu. Die Nachricht wird vorher weder als sichtbarer HTML-Text noch über den Screenreader enthüllt.
+- **Geschenk:** Partikelbox mit eigenem Deckel und Schleife. Öffnen per Antippen, Klick oder Tastatur. Varianten: Schleife & Licht, Sternenstaub und umlaufende Punkte.
+- **Handy-Neigung:** Optional global als Standard und pro Abschnitt überschreibbar. Auf unterstützten Touch-Geräten bietet der Viewer „Neigung aktivieren“ an. Eine vom Browser verlangte Berechtigung wird ausschließlich nach dieser Aktion angefragt. Ablehnung oder fehlende Sensoren blockieren die Nachricht nicht. Der erste Sensorwert kalibriert die Bewegung; Orientierung wird berücksichtigt. Gelesener Text wird höchstens um 0,65 CSS-Pixel je Achse verschoben. Bei reduzierter Bewegung wird die Neigung deaktiviert.
+- **Geheime Worte:** Im Text einen Bereich markieren und „Auswahl geheim“ wählen. Bis zu vier Zusatztexte mit je höchstens 100 Zeichen. Markierte Wörter erhalten im Viewer eine dezente Punktunterstreichung und tastaturbedienbare Trefferflächen. Nur ihre Punkte formen den Zusatztext; die übrige Nachricht bleibt bestehen. Rückkehr automatisch oder per Taste. Abschnitte mit Geheimnissen bleiben bis „Weiter“ offen. Textänderungen vor einer Markierung verschieben sie mit; Änderungen innerhalb entfernen die betroffene Markierung mit einem Hinweis.
+- **Abschluss:** Unter „Für die ganze Nachricht“ aktivieren. Nach der letzten Szene fliegen die Punkte auseinander und bilden Herz, Stern, Unendlichkeit oder bis zu 80 Zeichen eigenen Text. Haltezeit 2–10 Sekunden, anschließend Verblassen, Weiterschweben oder Explosion. Beim Weiterschweben bleibt die Form hinter dem Wiederholen-Button erhalten. Die Gesamtvorschau kehrt anschließend zum Editor zurück.
+
+Rätsel und versteckte Texte sind Teil der Inszenierung. Wie bisher stehen Inhalte im öffentlichen JSONB-Datensatz; sie sind keine Verschlüsselung oder serverseitige Zugriffssperre.
+
+## Architektur und Speicherformat
+
+Die vorhandene Tabelle und Formatversion 1 werden weiterverwendet; **keine neue Datenbankmigration** ist nötig. Neue Felder sind optional und werden beim Speichern und Laden strikt validiert. Unbekannte Zusatzfelder werden verworfen. Bestehende Links ohne Extras spielen wie gewohnt automatisch ab.
+
+```json
+{
+  "version": 1,
+  "slides": [{
+    "text": "Hallo Welt.",
+    "duration": 3000,
+    "font": "handwriting",
+    "effect": "spiral",
+    "features": {
+      "hold": true,
+      "gift": "ribbon",
+      "tilt": true,
+      "puzzle": { "kind": "code", "question": "Unser Code?", "code": "007" },
+      "secrets": [{ "start": 0, "end": 5, "text": "Nur für dich.", "returnAfter": 5000 }]
+    }
+  }],
+  "settings": {
+    "effect": "morph",
+    "finale": true,
+    "writing": { "enabled": false, "speed": 75, "punctuationPause": 420, "paragraphPause": 800 },
+    "finaleConfig": { "shape": "heart", "ending": "float", "duration": 4000 }
+  }
+}
+```
+
+`secrets.start/end` sind UTF-16-Offsets wie bei Textarea-Auswahlen. Der Validator schützt Graphemgrenzen, prüft Überlappungen und passt Offsets beim Trimmen an. `returnAfter: 0` bedeutet manuelle Rückkehr. Rätselantworten werden über den nullbasierten Index `correct` bestimmt. Deaktivierte Finales brauchen keine vollständig ausgefüllte Abschlusskonfiguration.
+
+- `lines/OneLineEngine.ts`: Bestehender Canvas-Lebenszyklus, UI-Konturen, Schriftlayout, Timing und Koordination des Partikel-Pools.
+- `particles/SceneParticles.ts`: Wiederverwendung von Punkten, Glyph-Sampling, Geschenk- und Abschlussformen, lokale Geheimnisse und gebündeltes Zeichnen.
+- `particles/reveal.ts`: Reproduzierbare, kontinuierliche Reveal-Pfade und reversible Hold-Fortschritte mit exakt ruhenden Endpunkten.
+- `lib/ScenePlayer.ts`: Gemeinsame abbrechbare Szenenfolge für Vorschau und öffentliche Wiedergabe, Interaktionsschritte und Lesepausen.
+- `types/experience.ts`: Optionale Datenmodelle, Validierung und Anpassung von Textmarkierungen.
+- `components/SceneFeatureEditor.tsx`, `SceneControls.tsx`, `DeviceTilt.tsx`: Editoreinstellungen, zugängliche Bedienung und Sensorzugriff.
+
+Es bleibt bei einem Canvas und einem requestAnimationFrame-Zyklus. Nachrichten-Geometrie entsteht bei Text- oder Layoutänderungen, niemals pro Frame. Der Nachrichten-Pool ist auf 4.200 Punkte auf schmalen Displays und 7.000 auf Desktop begrenzt; Schrift- und Emoji-Sampling wird zwischengespeichert. Die Canvas-Auflösung ist auf DPR 2 begrenzt. Gebündelte Zeichenaufrufe vermeiden Glow-Filter pro Punkt. Partikel der kleinen Live-Vorschau werden auf deren Fläche begrenzt. Unsichtbare Tabs pausieren die Animationszeit; alle Listener und wartenden Schritte werden bei Abbruch aufgeräumt. Ohne Canvas bleiben auch Rätsel, Geschenk, Halten und Geheimnisse über HTML bedienbar.
 
 ## Prüfungen
 

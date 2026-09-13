@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { OneLineEngine as ParticleEngine } from '@/lines/OneLineEngine';
 import { FONT_LABELS, EFFECT_LABELS, slideSettings, type Slide, type MessageSettings } from '@/types/message';
-export default function LivePreview({ active, engine, slide, settings }: { active: boolean; engine: ParticleEngine | null; slide: Slide; settings: MessageSettings }) {
+export default function LivePreview({ active, engine, slide, settings, onTest }: { onTest: () => void; active: boolean; engine: ParticleEngine | null; slide: Slide; settings: MessageSettings }) {
   const bounds = useRef<HTMLDivElement>(null);
   const [replay, setReplay] = useState(0);
   const { text, duration } = slide;
@@ -33,5 +33,6 @@ export default function LivePreview({ active, engine, slide, settings }: { activ
     <div data-particle="line" className="particle-divider" />
     <div className="preview-bounds" ref={bounds}><p data-message-font={font} className={engine ? 'sr-only' : 'live-fallback'}>{text || 'Deine Worte.'}</p></div>
     <p data-particle="text" className="preview-caption">{FONT_LABELS[font]} · {EFFECT_LABELS[effect]}</p>
+    {(slide.features?.hold || slide.features?.gift || slide.features?.puzzle || slide.features?.secrets?.length || settings.finale) && <div className="preview-extras"><p>{[slide.features?.puzzle && 'Rätsel', slide.features?.gift && 'Geschenk', slide.features?.hold && 'Gedrückt halten', slide.features?.secrets?.length && 'Geheime Worte', settings.finale && 'Finale'].filter(Boolean).join(' · ')}</p><button data-particle="button" onClick={onTest}>Gesamtes Erlebnis testen ↗</button><span>Hier siehst du Schrift und Reveal. Alle Extras erlebst du in der Gesamtvorschau.</span></div>}
   </aside>;
 }

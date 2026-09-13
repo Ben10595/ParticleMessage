@@ -1,3 +1,20 @@
+# Partikel-Erlebnisse – 13. September 2026
+
+Die sieben Erweiterungen sind in die vorhandene Website integriert: sechs zusätzliche Reveals (insgesamt 16 plus Zufall), reversibles Hold-to-Reveal, Multiple-Choice- und Code-Rätsel, drei Geschenkvarianten, optionale Handy-Neigung, lokale Geheimnisse und konfigurierbare Abschlussformen samt drei Endverhalten. Vorhandene Schriften, Routen, Zugangsschutz, Speicherung und 72-Stunden-Ablauf bleiben erhalten.
+
+- TypeScript, ESLint, Production Build und `git diff --check`: erfolgreich.
+- `npm test`: 37 Tests bestanden. Neue Abdeckung für validiertes Roundtripping, alte Links, führende Leerzeichen und Graphemgrenzen, überlappende Geheimnisse, ungültige Rätsel und Finales, Textänderungen vor/in Markierungen, stetige Reveal-Pfade, exakte Endpunkte, reversibles Halten, Reduced Motion, Partikelbudgets, Trefferflächen und begrenzte Neigung.
+- Vollständige Browser-Suite: **44 bestanden, 2 erwartete Desktop-Skips**. Sensorprüfungen laufen ausschließlich im mobilen Projekt. Chrome Desktop und Chromium mit iPhone-13-Emulation.
+- Nach der abschließenden Anpassung von Haltefläche und Zusatzschrift: alle acht betroffenen Desktop-/Mobile-Interaktionstests erneut bestanden.
+- Geprüft: kombinierte Folge Rätsel → Geschenk → Halten → lokales Geheimnis → Finale → Wiederholung; falsche Antworten und führende Nullen; Speichern sämtlicher Optionen; unveränderter Entwurf nach Abbruch eines Rätsels; partielles Halten/Loslassen; Tastatur; automatische und manuelle Geheimnis-Rückkehr; Resize während eines Geheimnisses; sechs zusätzliche Reveal-Arten; Text/Herz/Stern/Unendlichkeit und sämtliche Abschluss-Enden; erteilter sowie abgelehnter Sensorzugriff; Canvas-Fallback und Reduced Motion.
+- Sichtprüfung anhand von Desktop- und Mobile-Screenshots: ursprüngliche Schriftkonturen aus Punkten, lange Nachrichten, Geschenk, Rätsel, lokale Zusatznachricht, Editorfelder und schwebendes Finale. Beispiele unter `test-results/features-*.png` (durch spätere Testläufe neu erzeugt). Die Zusatzschrift auf schmalen Displays wurde für angenehmere Wortumbrüche verkleinert; der Haltebereich umfasst den Bildschirm, während Vorschau-Abbruch und Sensorsteuerung erreichbar bleiben.
+
+Supabase-Antworten und Sensorberechtigungen/-ereignisse wurden in den Browserprüfungen simuliert. Keine entfernte Datenbankänderung und kein Deployment. Echte iOS-/Android-Sensoren, physische Bildschirmtastaturen und die Leistung auf leistungsschwacher Hardware wurden nicht gemessen. Lokale FPS-Stichproben der Suite lagen bei 60; daraus folgt keine Garantie für andere Geräte.
+
+Die neue Logik nutzt die vorhandene JSONB-Spalte und benötigt keine zusätzliche Migration. Die frühere Ablaufmigration weiter unten bleibt davon unabhängig.
+
+---
+
 # Schriftauswahl und zusätzliche Animationen – 12. September 2026
 
 Vier Strichschriften (Handschrift, Klar, Editorial, Mono), Schriftproben im Menü und zehn Animationen plus Zufallsauswahl sind pro Abschnitt verfügbar. Die Auswahl wird in Vorschau, Gesamtwiedergabe und geteiltem Link übernommen. Bestehende Nachrichten ohne Schriftangabe bleiben lesbar.

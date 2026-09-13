@@ -3,6 +3,9 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ParticleCanvas from './ParticleCanvas';
 import ParticleEditor from './ParticleEditor';
+import { ScenePlayer, type PlaybackStage } from '@/lib/ScenePlayer';
+import DeviceTilt from './DeviceTilt';
+import SceneControls from './SceneControls';
 import ParticleViewer from './ParticleViewer';
 import PasswordGate from './PasswordGate';
 import Branding from './Branding';
@@ -29,6 +32,9 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
   const [copyStatus, setCopyStatus] = useState('Link kopieren');
   const [playbackText, setPlaybackText] = useState('');
   const [playbackIndex, setPlaybackIndex] = useState(0);
+  const [playbackSlides, setPlaybackSlides] = useState<Slide[]>(initialSlides);
+  const [stage, setStage] = useState<PlaybackStage>({ phase: 'forming', index: 0, text: '' });
+  const [player, setPlayer] = useState<ScenePlayer | null>(null);
   const surface = useRef<HTMLElement>(null);
   const linkInput = useRef<HTMLTextAreaElement>(null);
   const sequence = useRef<AbortController | null>(null);
@@ -64,16 +70,14 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
       await wait(engine?.reducedMotion ? 0 : 180, controller.signal);
       if (surface.current && engine) engine.departUI(surface.current);
       await wait(engine?.reducedMotion ? 0 : 670, controller.signal);
-      setView('playing'); setTransitioning(false); transitionLock.current = false;
-      for (let index = 0; index < items.length; index++) {
-        if (controller.signal.aborted) return;
-        setPlaybackIndex(index); setPlaybackText(items[index].text);
-        const opts = slideSettings(items[index], options);
-        const formation = engine?.formText(items[index].text, { ...opts, finale: options.finale && index === items.length - 1 }) ?? 0;
-        await wait(formation + items[index].duration, controller.signal);
-      }
-      engine?.disperseParticles(.4); setPlaybackText(''); setTransitioning(true);
-      await wait(engine?.reducedMotion ? 0 : 1400, controller.signal);
+      setPlaybackSlides(items); setView('playing'); setTransitioning(false); transitionLock.current = false;
+      const session = new ScenePlayer(engine, wait, controller.signal, next => { setStage(next); setPlaybackIndex(next.index); setPlaybackText(next.text); });
+      setPlayer(session);
+      await session.run(items, options);
+      const floating = options.finale && (options.finaleConfig?.ending ?? 'float') === 'float';
+      if (!floating || !slug) engine?.disperseParticles(.4);
+      setPlaybackText('');
+      if (!floating || !slug) { setTransitioning(true); await wait(engine?.reducedMotion ? 0 : 1400, controller.signal); }
       if (!controller.signal.aborted) { setView(slug ? 'ended' : 'editor'); setTransitioning(false); }
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === 'AbortError') return;
@@ -133,12 +137,12 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
   return <main data-scene={view} className={`experience ${engine && !fallback ? 'canvas-ready' : ''} ${transitioning ? 'transitioning' : ''} ${!engine && !fallback ? 'canvas-pending' : ''}`} ref={surface} aria-busy={transitioning || busy} onKeyDownCapture={event => { if (transitioning) event.preventDefault(); }}>
     <ParticleCanvas onReady={setEngine} onError={onError} />
     {fallback && <p className="fallback-note" role="status">Canvas ist hier nicht verfügbar. Du kannst die Nachricht trotzdem schreiben, teilen und lesen.</p>}
-    {showChrome && <header className="masthead"><span data-particle="text" className="wordmark">PARTICLEMESSAGE</span>{view === 'editor' ? <button data-particle="button" className="back" disabled={busy} onClick={() => void transition('home')}>← Zurück</button> : <span data-particle="text" className="edition">EINE LINIE. DEINE WORTE.</span>}</header>}
+    {showChrome && <header className="masthead"><span data-particle="text" className="wordmark">PARTICLEMESSAGE</span>{view === 'editor' ? <button data-particle="button" className="back" disabled={busy} onClick={() => void transition('home')}>← Zurück</button> : <span data-particle="text" className="edition">VIELE PUNKTE. DEINE WORTE.</span>}</header>}
     {view === 'password' && <PasswordGate onUnlock={unlock} />}
     {view === 'home' && <section className="landing"><h1 data-particle="hero" data-particle-delay="500">Schreib etwas.</h1><button data-particle="button" data-particle-delay="1350" className="primary" onClick={() => void transition('editor')}>Nachricht erstellen</button></section>}
-    {view === 'editor' && <ParticleEditor previewActive={!transitioning} engine={engine} settings={settings} slides={slides} active={active} onSelect={setActive} onChange={next => { setSlides(next); setError(''); }} onPreview={preview} onSave={() => void save()} busy={busy} error={error} />}
-    {view === 'playing' && <ParticleViewer text={playbackText} font={slideSettings(slides[playbackIndex] ?? slides[0], settings).font} preview={!slug} onClose={() => void transition('editor')} current={playbackIndex} total={slides.length} />}
-    {view === 'ended' && <section className="landing end"><button data-particle="button" className="primary" onClick={() => void play(slides, settings)}>Nochmal ↺</button>{!slug && <button data-particle="button" onClick={() => void transition('editor')}>← Zurück zum Editor</button>}</section>}
+    {view === 'editor' && <ParticleEditor previewActive={!transitioning} engine={engine} settings={settings} onSettingsChange={setSettings} slides={slides} active={active} onSelect={setActive} onChange={next => { setSlides(next); setError(''); }} onPreview={preview} onSave={() => void save()} busy={busy} error={error} />}
+    {view === 'playing' && <><ParticleViewer text={playbackText} font={slideSettings(playbackSlides[playbackIndex] ?? playbackSlides[0], settings).font} preview={!slug} onClose={() => void transition('editor')} current={playbackIndex} total={playbackSlides.length} /><SceneControls key={playbackIndex} engine={engine} player={player} stage={stage} slide={playbackSlides[playbackIndex] ?? playbackSlides[0]} /><DeviceTilt engine={engine} enabled={playbackSlides[playbackIndex]?.features?.tilt ?? settings.tilt ?? false} /></>}
+    {view === 'ended' && <section className={`landing end ${settings.finale && (settings.finaleConfig?.ending ?? 'float') === 'float' ? 'floating-end' : ''}`}><button data-particle="button" className="primary" onClick={() => void play(slides, settings)}>Nochmal ↺</button>{!slug && <button data-particle="button" onClick={() => void transition('editor')}>← Zurück zum Editor</button>}</section>}
     {view === 'success' && <section className="landing success"><p data-particle="text" className="eyebrow">BEREIT FÜR EINEN BESONDEREN MENSCHEN.</p><h1 data-particle="hero">Deine Nachricht ist bereit.</h1><p data-particle="text" className="intro">Teile diesen Link mit deinem Menschen. Er ist 3 Tage gültig.</p><div className="share-link"><span data-particle="text" className="particle-link">{link}</span><textarea ref={linkInput} readOnly value={link} aria-label="Link zu deiner Nachricht" onFocus={event => event.target.select()} /></div><button data-particle="button" className="primary copy" onClick={() => void copy()}>{copyStatus}</button><div className="success-actions"><button data-particle="button" onClick={() => void transition('editor')}>← Weiter bearbeiten</button><a data-particle="button" href={link}>Nachricht öffnen ↗</a></div><span className="sr-only" aria-live="polite">{copyStatus}</span></section>}
     {view === 'loading' && <section className="landing"><p className="sr-only" role="status">Nachricht wird geladen.</p></section>}
     {view === 'error' && <section className="landing"><h1 data-particle="hero" className="status-title">{error}</h1><p className="sr-only" role="alert">{error}</p>{retryable && <button data-particle="button" className="primary" onClick={() => { setView('loading'); setRetry(n => n + 1); }}>Erneut versuchen</button>}<Link data-particle="button" className="home-link" href="/">Eigene Nachricht schreiben ↗</Link></section>}

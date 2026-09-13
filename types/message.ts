@@ -1,15 +1,16 @@
+import { validateFeatures, validateFinale, type SceneFeatures, type Finale } from './experience';
 // Version 1 remains readable: new per-slide settings are optional.
-export const EFFECTS = ['morph', 'scatter', 'vortex', 'wave', 'rain', 'implode', 'fade', 'rise', 'bloom', 'typewriter', 'random'] as const;
-const LEGACY_EFFECTS = ['explosion', 'outward'] as const;
+export const EFFECTS = ['morph', 'scatter', 'vortex', 'wave', 'rain', 'implode', 'fade', 'rise', 'bloom', 'typewriter', 'explosion', 'spiral', 'magnet', 'zoom', 'sweep', 'collect', 'random'] as const;
+const LEGACY_EFFECTS = ['outward'] as const;
 export type TransitionEffect = typeof EFFECTS[number] | typeof LEGACY_EFFECTS[number];
-export const EFFECT_LABELS: Record<TransitionEffect, string> = { morph: 'Linienfluss', scatter: 'Verstreut', vortex: 'Wirbel', wave: 'Welle', rain: 'Regen', implode: 'Zusammenziehen', fade: 'Sanft einblenden', rise: 'Aufsteigen', bloom: 'Aufblühen', typewriter: 'Schreibmaschine', random: 'Zufall', explosion: 'Verstreut', outward: 'Verstreut' };
+export const EFFECT_LABELS: Record<TransitionEffect, string> = { morph: 'Linienfluss', scatter: 'Verstreut', vortex: 'Wirbel', wave: 'Welle', rain: 'Regen', implode: 'Zusammenziehen', fade: 'Sanft einblenden', rise: 'Aufsteigen', bloom: 'Aufblühen', typewriter: 'Schreibmaschine', random: 'Zufall', explosion: 'Explosion', spiral: 'Spirale', magnet: 'Magnet', zoom: 'Zoom von außen', sweep: 'Von links nach rechts', collect: 'Punkte einsammeln', outward: 'Verstreut' };
 export const EFFECT_DESCRIPTIONS: Record<TransitionEffect, string> = {
   morph: 'Deine Worte entstehen ruhig, Strich für Strich.', scatter: 'Die Buchstaben finden aus verschiedenen Richtungen zusammen.',
   vortex: 'Ein kleiner Schwung dreht jeden Buchstaben an seinen Platz.', wave: 'Eine sanfte Welle trägt deine Worte in die Zeile.',
   rain: 'Die Buchstaben fallen behutsam von oben ein.', implode: 'Weite Formen ziehen sich zu deinen Worten zusammen.',
   fade: 'Die Buchstaben erscheinen weich aus der Dunkelheit.', rise: 'Deine Worte schweben sanft nach oben.',
   bloom: 'Jeder Buchstabe wächst auf und kommt zur Ruhe.', typewriter: 'Ein Zeichen nach dem anderen – wie auf einer Schreibmaschine.',
-  random: 'Bei jedem Abspielen überrascht eine andere Animation.', explosion: 'Die Buchstaben finden aus verschiedenen Richtungen zusammen.', outward: 'Die Buchstaben finden aus verschiedenen Richtungen zusammen.',
+  random: 'Bei jedem Abspielen überrascht eine andere Animation.', explosion: 'Ein Funkenstoß fliegt auseinander und findet als Text zusammen.', spiral: 'Punkte kreisen spiralförmig in deine Worte.', magnet: 'Deine Worte ziehen die Punkte wie ein Magnet an.', zoom: 'Punkte kommen von weit außen und rasten sanft ein.', sweep: 'Ein Lichtband baut deine Worte von links nach rechts auf.', collect: 'Verstreute Punkte sammeln sich nach und nach zu deiner Nachricht.', outward: 'Die Buchstaben finden aus verschiedenen Richtungen zusammen.',
 };
 export const FONTS = ['handwriting', 'classic', 'editorial', 'mono'] as const;
 export type MessageFont = typeof FONTS[number];
@@ -19,8 +20,8 @@ export interface WritingSettings {
   enabled: boolean; speed: number; punctuationPause: number; paragraphPause: number;
   commaPause?: number; periodPause?: number; questionPause?: number; exclamationPause?: number;
 }
-export interface MessageSettings { effect: TransitionEffect; finale: boolean; writing: WritingSettings; font?: MessageFont }
-export interface Slide { text: string; duration: number; effect?: TransitionEffect; writing?: WritingSettings; font?: MessageFont }
+export interface MessageSettings { effect: TransitionEffect; finale: boolean; writing: WritingSettings; font?: MessageFont; tilt?: boolean; finaleConfig?: Finale }
+export interface Slide { text: string; duration: number; effect?: TransitionEffect; writing?: WritingSettings; font?: MessageFont; features?: SceneFeatures }
 export interface MessageContent { version: 1; slides: Slide[]; settings?: MessageSettings }
 export const WRITING_PRESETS = {
   Schnell: { speed: 35, punctuationPause: 180, paragraphPause: 350, commaPause: 80, periodPause: 180, questionPause: 250, exclamationPause: 180 },
@@ -61,11 +62,16 @@ export function validateMessage(value: unknown): MessageContent {
     if (!numberIn(slide.duration, MIN_DURATION, MAX_DURATION)) throw new Error(`Abschnitt ${index + 1}: Wähle 1 bis 10 Sekunden.`);
     if (slide.effect !== undefined && !isEffect(slide.effect)) throw new Error('Dieser Übergang ist ungültig.');
     if (slide.font !== undefined && !isFont(slide.font)) throw new Error('Diese Schriftart ist ungültig.');
-    return { text, duration: Math.round(slide.duration), ...(slide.effect !== undefined ? { effect: slide.effect } : {}), ...(slide.font !== undefined ? { font: slide.font } : {}), ...(slide.writing !== undefined ? { writing: validateWriting(slide.writing) } : {}) };
+    const leading = slide.text.length - slide.text.trimStart().length;
+    const features = slide.features === undefined ? undefined : validateFeatures(slide.features, slide.text);
+    if (features?.secrets) features.secrets = features.secrets.map(secret => ({ ...secret, start: secret.start - leading, end: secret.end - leading }));
+    if (features) validateFeatures(features, text);
+    return { text, ...(features ? { features } : {}), duration: Math.round(slide.duration), ...(slide.effect !== undefined ? { effect: slide.effect } : {}), ...(slide.font !== undefined ? { font: slide.font } : {}), ...(slide.writing !== undefined ? { writing: validateWriting(slide.writing) } : {}) };
   });
   if (value.settings === undefined) return { version: 1, slides };
   const s = value.settings;
   if (!record(s) || !isEffect(s.effect) || typeof s.finale !== 'boolean') throw new Error('Die Animationseinstellungen sind ungültig.');
   if (s.font !== undefined && !isFont(s.font)) throw new Error('Diese Schriftart ist ungültig.');
-  return { version: 1, slides, settings: { effect: s.effect, finale: s.finale, writing: validateWriting(s.writing), ...(s.font !== undefined ? { font: s.font } : {}) } };
+  if (s.tilt !== undefined && typeof s.tilt !== 'boolean') throw new Error('Die Neigungseinstellung ist ungültig.');
+  return { version: 1, slides, settings: { effect: s.effect, finale: s.finale, ...(s.tilt !== undefined ? { tilt: s.tilt } : {}), ...(s.finale && s.finaleConfig !== undefined ? { finaleConfig: validateFinale(s.finaleConfig) } : {}), writing: validateWriting(s.writing), ...(s.font !== undefined ? { font: s.font } : {}) } };
 }

@@ -1,10 +1,13 @@
+import { seed } from '../particles/reveal';
+import { SceneParticles, sampleLayout, secretBounds, shapeTargets, type SecretBounds } from '../particles/SceneParticles';
+import type { Finale, GiftStyle, Secret } from '../types/experience';
 import { graphemes, typingTimeline } from '../lib/playback';
 import { DEFAULT_FONT, EFFECTS, type MessageFont, type TransitionEffect, type WritingSettings } from '../types/message';
 import { clamp, contour, ease, measure, pointAt, type Point } from './geometry';
 import { layoutLineText, type LineLayout } from './lineFont';
 import { entranceDuration, entranceFrame, inkProgress, scheduleStrokes } from './writing';
 
-interface FormOptions { bounds?: () => DOMRect; writing?: WritingSettings; effect?: TransitionEffect; finale?: boolean; font?: MessageFont }
+export interface FormOptions { reserveSpace?: boolean; hold?: boolean; bounds?: () => DOMRect; writing?: WritingSettings; effect?: TransitionEffect; finale?: boolean; font?: MessageFont }
 interface Entrance { start: number; x: number; y: number; size: number; index: number }
 interface Strand { entrance?: Entrance; ink?: boolean; effect?: TransitionEffect; key: string; points: Point[]; lengths: number[]; length: number; start: number; duration: number; opacity: number; width: number; retract?: number; retractDuration?: number; from?: number; fromPoints?: Point[]; fromLengths?: number[]; movedAt?: number; fallback?: { char: string; size: number }; element?: HTMLElement }
 interface Message { text: string; options: FormOptions; start: number; timeline: number[]; durations: number[]; layout: LineLayout; completion: number }
@@ -19,6 +22,10 @@ export class OneLineEngine {
   private strands = new Map<string, Strand>();
   private ids = new WeakMap<Element, number>(); private nextId = 0;
   private message: Message | null = null;
+  private sceneParticles = new SceneParticles();
+  private shape: Finale['shape'] | 'gift' | null = null;
+  private activeSecret: Secret | null = null;
+  private sceneClip: DOMRect | null = null;
   private motion = matchMedia('(prefers-reduced-motion: reduce)');
   private departing = false; private animateLayout = true;
   private hover: { rect: { x: number; y: number; width: number; height: number }; start: number } | null = null;
@@ -29,7 +36,7 @@ export class OneLineEngine {
     if (!ctx) throw new Error('Canvas wird von deinem Browser nicht unterstützt.');
     this.ctx = ctx; this.reducedMotion = this.motion.matches;
     this.resize();
-    this.canvas.dataset.renderer = 'one-line';
+    this.canvas.dataset.renderer = 'particles';
     window.addEventListener('resize', this.resize);
     window.addEventListener('scroll', this.refresh, { passive: true, capture: true });
     document.addEventListener('visibilitychange', this.visibility);
@@ -49,7 +56,8 @@ export class OneLineEngine {
     this.refreshFrame = requestAnimationFrame(() => {
       this.refreshFrame = 0; this.animateLayout = false;
       if (this.root?.isConnected && !this.departing) this.captureUI();
-      if (this.message) this.layoutMessage(this.message);
+      if (this.message) { this.layoutMessage(this.message, true); if (this.activeSecret) this.revealSecret(this.activeSecret); }
+      else if (this.shape) this.sceneParticles.form(shapeTargets(this.shape, this.width, this.height), this.time, 'morph', 1000, this.width, this.height, false, true);
       this.animateLayout = true;
     });
   };
@@ -121,11 +129,12 @@ export class OneLineEngine {
     this.stats();
   }
   departUI(root: HTMLElement) {
-    this.root = root; this.departing = true; this.message = null;
+    this.root = root; this.departing = true; this.message = null; this.shape = null; this.activeSecret = null; this.sceneParticles.disperse(this.time, this.width, this.height, .4);
     this.windBack([...this.strands.values()]);
     this.canvas.dataset.phase = 'dispersing';
   }
   formText(text: string, options: FormOptions | boolean = {}): number {
+    this.shape = null; this.activeSecret = null;
     const opts = typeof options === 'boolean' ? {} : { ...options };
     if (opts.effect === 'random') {
       const choices = EFFECTS.filter(effect => effect !== 'random');
@@ -146,44 +155,73 @@ export class OneLineEngine {
       // A pause belongs after the completed glyph, not inside its pen strokes.
       return this.reducedMotion ? 0 : Math.max(1, Math.min(slot, typing ? opts.writing!.speed : slot) * .92);
     });
-    const completion = this.reducedMotion ? 0 : (timeline.at(-1) ?? 0) + Math.max(durations.at(-1) ?? 0, entranceDuration(opts.effect)) + 120;
+    const completion = this.reducedMotion ? 0 : (timeline.at(-1) ?? 0) + 700 + 120;
     const message: Message = { text, options: opts, start, timeline, durations, layout: { glyphs: [], fontSize: 0, lineCount: 0, height: 0 }, completion };
     this.message = message; this.layoutMessage(message); this.canvas.dataset.phase = this.reducedMotion ? 'holding' : 'forming';
     return this.reducedMotion ? 0 : start - this.time + completion;
   }
-  private layoutMessage(message: Message) {
+  private layoutMessage(message: Message, refresh = false) {
     const rect = message.options.bounds?.();
-    const box = rect ?? { x: this.width * .09, y: this.height * .2, width: this.width * .82, height: this.height * .6 };
+    this.sceneClip = rect ?? null;
+    const box = rect ?? { x: this.width * .09, y: this.height * .2, width: this.width * .82, height: this.height * (message.options.reserveSpace ? .44 : .6) };
     const layout = message.layout = layoutLineText(message.text, box, Math.min(rect ? 48 : 96, box.width / (rect ? 7 : 9)), 'center', message.options.font);
-    for (const g of layout.glyphs) {
-      const offset = message.timeline[g.index] ?? 0;
-      const duration = message.durations[g.index] ?? 0;
-      const strokes = scheduleStrokes(g.paths, duration);
-      const entrance = { start: message.start + offset, x: g.x + g.width / 2, y: g.y + layout.fontSize * .45, size: layout.fontSize, index: g.index };
-      g.paths.forEach((points, i) => this.put(`text-${g.index}-${i}`, points, message.start + offset + strokes[i].offset, strokes[i].duration, 1, Math.max(1.15, layout.fontSize / 48), undefined, undefined, true, message.options.effect, entrance));
-      if (g.fallback) this.put(`text-${g.index}-emoji`, [{ x: g.x, y: g.y }], message.start + offset, duration, 1, 1, undefined, { char: g.char, size: layout.fontSize }, false, message.options.effect, entrance);
-    }
+    const targets = sampleLayout(layout).map((target, i) => {
+      let delay = message.timeline[target.glyph] ?? 0;
+      if (!message.options.writing?.enabled) {
+        if (message.options.effect === 'sweep') delay = (target.x - box.x) / box.width * 900;
+        else if (message.options.effect === 'collect') delay = seed(i) * 900;
+        else if (message.options.effect === 'wave') delay = (target.x - box.x) / box.width * 550;
+        else if (!['morph', 'typewriter'].includes(message.options.effect ?? 'morph')) delay = seed(i) * 160;
+      }
+      return { ...target, delay: message.options.hold || this.reducedMotion ? 0 : delay };
+    });
+    this.sceneParticles.form(targets, message.start, message.options.effect ?? 'morph', this.reducedMotion ? 0 : 700, this.width, this.height, message.options.hold, refresh);
     this.canvas.dataset.textFont = message.options.font ?? DEFAULT_FONT;
     this.canvas.dataset.textEffect = message.options.effect ?? 'morph';
     this.canvas.dataset.textFontSize = String(layout.fontSize); this.canvas.dataset.textLineCount = String(layout.lineCount); this.stats();
   }
   disperseText(_strength = .8) {
-    void _strength; this.message = null;
+    this.shape = null; this.activeSecret = null; this.sceneParticles.disperse(this.time, this.width, this.height, _strength); this.message = null;
     this.windBack([...this.strands.values()].filter(s => s.key.startsWith('text-') || s.key.startsWith('out-')));
     this.canvas.dataset.phase = 'dispersing';
   }
   loosenText() { this.disperseText(); }
   disperseParticles(_strength = 1) {
-    void _strength; this.message = null; this.root = null; this.departing = true;
+    this.shape = null; this.activeSecret = null; this.sceneParticles.disperse(this.time, this.width, this.height, _strength); this.message = null; this.root = null; this.departing = true;
     this.windBack([...this.strands.values()]);
     this.canvas.dataset.phase = 'dispersing';
   }
+  get holdProgress() { return this.sceneParticles.holdProgress; }
+  setHeld(pressed: boolean) { this.sceneParticles.setPressed(pressed, this.reducedMotion); }
+  setTilt(x: number, y: number) { this.sceneParticles.setTilt(x, y); }
+  formShape(shape: Finale['shape'] | 'gift') {
+    this.message = null; this.sceneClip = null; this.shape = shape;
+    this.sceneParticles.form(shapeTargets(shape, this.width, this.height), this.time, 'spiral', this.reducedMotion ? 0 : 1100, this.width, this.height);
+    this.canvas.dataset.textTargetCount = String(this.sceneParticles.count);
+    return this.reducedMotion ? 0 : 1100;
+  }
+  openGift(style: GiftStyle) { this.sceneParticles.openGift(this.time, style); }
+  floatFinale() { this.sceneParticles.float(); }
+  getSecretBounds(secrets: Secret[]): SecretBounds[] { return this.message ? secretBounds(this.message.layout, this.message.text, secrets) : []; }
+  revealSecret(secret: Secret) {
+    const message = this.message;
+    if (!message) return;
+    this.activeSecret = secret;
+    let offset = 0;
+    const selected = new Set<number>();
+    for (const g of message.layout.glyphs) { if (offset >= secret.start && offset < secret.end) selected.add(g.index); offset += g.char.length; }
+    const rect = message.options.bounds?.();
+    const box = rect ? { x: rect.x + 10, y: rect.y + rect.height * .64, width: rect.width - 20, height: rect.height * .36 } : { x: this.width * .1, y: this.height * .67, width: this.width * .8, height: this.height * .17 };
+    const layout = layoutLineText(secret.text, box, Math.min(rect ? 24 : 40, box.width / 15), 'center', message.options.font);
+    this.sceneParticles.revealSubset(selected, sampleLayout(layout), this.time);
+  }
+  restoreSecret() { this.activeSecret = null; if (this.message) this.sceneParticles.restoreSubset(sampleLayout(this.message.layout), this.time); }
   triggerHoverSparks(rect: { x: number; y: number; width: number; height: number }) {
     if (!this.reducedMotion) this.hover = { rect, start: this.time };
   }
   emitTypingFlow(rect?: DOMRect, _target?: DOMRect | null) { void _target; if (rect) this.triggerHoverSparks(rect); }
   private stats() {
-    let ui = 0, text = 0;
+    let ui = 0, text = this.sceneParticles.count;
     for (const s of this.strands.values()) { if (s.key.startsWith('ui-')) ui += s.points.length; if (s.key.startsWith('text-')) text += s.points.length; }
     this.canvas.dataset.uiTargetCount = String(ui); this.canvas.dataset.textTargetCount = String(text);
     this.canvas.dataset.linePointCount = String(ui + text);
@@ -216,7 +254,7 @@ export class OneLineEngine {
     tip = transform(tip);
     ctx.globalAlpha = alpha; ctx.lineWidth = s.width; ctx.beginPath(); const first = transform(position(s.points[0], 0)); ctx.moveTo(first.x, first.y);
     for (let i = 1; i < s.points.length && s.lengths[i] < distance; i++) { const p = transform(position(s.points[i], i)); ctx.lineTo(p.x, p.y); }
-    ctx.lineTo(tip.x, tip.y); ctx.stroke(); return tip;
+    ctx.lineTo(tip.x, tip.y); ctx.setLineDash?.([.01, Math.max(2.8, s.width * 2.7)]); ctx.stroke(); ctx.setLineDash?.([]); return tip;
   }
   private tick = (now: number) => {
     if (this.disposed) return;
@@ -254,12 +292,17 @@ export class OneLineEngine {
         for (let i = 0; i < 16; i++) { const p = pointAt(points, m.lengths, ((progress + i * .003) % 1) * m.length); if (!i) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); } ctx.stroke();
       }
     }
+    if (this.sceneClip) { ctx.save(); ctx.beginPath(); ctx.rect?.(this.sceneClip.x, this.sceneClip.y, this.sceneClip.width, this.sceneClip.height); ctx.clip?.(); }
+    this.sceneParticles.draw(ctx, this.time, elapsed, this.width, this.height, this.reducedMotion);
+    if (this.sceneClip) ctx.restore();
+    this.canvas.dataset.holdProgress = this.sceneParticles.holdProgress.toFixed(3);
     if (this.message) {
       const message = this.message, elapsed = this.time - message.start;
       const visible = this.reducedMotion ? message.layout.glyphs.length : message.timeline.filter(time => time <= elapsed).length;
       this.canvas.dataset.visibleCharacters = String(visible);
-      this.canvas.dataset.phase = elapsed >= message.completion || this.reducedMotion ? 'holding' : 'forming';
-    } else if (!drawing && !this.departing) this.canvas.dataset.phase = 'holding';
+      this.canvas.dataset.phase = message.options.hold ? this.sceneParticles.holdProgress >= 1 ? 'holding' : 'revealing' : elapsed >= message.completion || this.reducedMotion ? 'holding' : 'forming';
+    } else if (this.sceneParticles.dispersing) this.canvas.dataset.phase = 'dispersing';
+    else if (!drawing && !this.departing) this.canvas.dataset.phase = 'holding';
     for (const waiter of this.waiters) if (this.time >= waiter.end) waiter.finish();
     this.fpsTotal += elapsed; this.fpsFrames++;
     if (this.fpsFrames >= 60) { this.canvas.dataset.fps = String(Math.round(1000 * this.fpsFrames / this.fpsTotal)); this.fpsFrames = this.fpsTotal = 0; }
@@ -279,6 +322,6 @@ export class OneLineEngine {
     window.removeEventListener('resize', this.resize); window.removeEventListener('scroll', this.refresh, true);
     document.removeEventListener('visibilitychange', this.visibility); this.motion.removeEventListener('change', this.changeMotion);
     for (const waiter of this.waiters) waiter.abort();
-    this.strands.clear(); this.root = null; this.message = null;
+    this.strands.clear(); this.sceneParticles.clear(); this.root = null; this.message = null;
   }
 }

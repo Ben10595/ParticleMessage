@@ -134,7 +134,7 @@ test('missing, expired and offline messages have line error scenes', async ({ pa
   await page.route('**/rest/v1/messages*', route => route.fulfill({ status: 503, body: 'Unavailable' }));
   await page.reload(); await expect(page.getByRole('button', { name: 'Erneut versuchen' })).toBeVisible({ timeout: 20000 });
 });
-test('live preview uses writing, hold duration, and the same line renderer', async ({ page }, testInfo) => {
+test('live preview uses writing, hold duration, and the same particle renderer', async ({ page }, testInfo) => {
   await unlock(page);
   await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Hi. A❤️');
   await page.getByRole('switch', { name: 'Schreibanimation' }).check();
@@ -145,7 +145,7 @@ test('live preview uses writing, hold duration, and the same line renderer', asy
   await expect(page.locator('canvas')).toHaveAttribute('data-visible-characters', '6');
   await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
   expect(await page.locator('canvas').count()).toBe(1);
-  await expect(page.locator('canvas')).toHaveAttribute('data-renderer', 'one-line');
+  await expect(page.locator('canvas')).toHaveAttribute('data-renderer', 'particles');
   expect(Number(await page.locator('canvas').getAttribute('data-line-point-count'))).toBeLessThan(12000);
   expect(Number(await page.locator('canvas').getAttribute('data-ui-target-count'))).toBeGreaterThan(100);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

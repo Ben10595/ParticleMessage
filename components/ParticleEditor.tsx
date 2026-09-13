@@ -2,11 +2,13 @@
 import { useRef, useState } from 'react';
 import { MAX_SLIDES, MAX_TEXT_LENGTH, EFFECTS, EFFECT_LABELS, EFFECT_DESCRIPTIONS, FONTS, FONT_LABELS, WRITING_PRESETS, slideSettings, type Slide, type MessageSettings, type TransitionEffect, type WritingSettings, type MessageFont } from '@/types/message';
 import type { OneLineEngine as ParticleEngine } from '@/lines/OneLineEngine';
+import SceneFeatureEditor from './SceneFeatureEditor';
+import { remapSecrets } from '@/types/experience';
 import LivePreview from './LivePreview';
 import ParticleSelect from './ParticleSelect';
 import FontSample from './FontSample';
 import { useLinePresence } from './useLinePresence';
-interface Props { previewActive: boolean; slides: Slide[]; settings: MessageSettings; engine: ParticleEngine | null; active: number; onSelect: (index: number) => void; onChange: (slides: Slide[]) => void; onPreview: () => void; onSave: () => void; busy: boolean; error: string }
+interface Props { onSettingsChange: (settings: MessageSettings) => void; previewActive: boolean; slides: Slide[]; settings: MessageSettings; engine: ParticleEngine | null; active: number; onSelect: (index: number) => void; onChange: (slides: Slide[]) => void; onPreview: () => void; onSave: () => void; busy: boolean; error: string }
 const emojis = ['❤️', '😂', '✨', '👀', '🥳', '🔥', '😊', '😭', '💀', '🤍', '🫶', '🌙'];
 const pauses = [
   { key: 'speed', label: 'Pro Zeichen', min: 20, max: 250, step: 5 },
@@ -16,14 +18,21 @@ const pauses = [
   { key: 'exclamationPause', label: 'Ausrufezeichen !', min: 0, max: 2500, step: 50 },
   { key: 'paragraphPause', label: 'Zeilenumbruch', min: 0, max: 4000, step: 50 },
 ] as const;
-export default function ParticleEditor({ previewActive, slides, settings, engine, active, onSelect, onChange, onPreview, onSave, busy, error }: Props) {
+export default function ParticleEditor({ previewActive, slides, settings, engine, active, onSelect, onChange, onPreview, onSave, busy, error, onSettingsChange }: Props) {
   const slide = slides[active];
   const { writing, effect, font } = slideSettings(slide, settings);
   const input = useRef<HTMLTextAreaElement>(null);
   const selection = useRef({ start: 0, end: 0 });
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [secretNotice, setSecretNotice] = useState('');
   const emojiPresent = useLinePresence(emojiOpen);
-  function update(patch: Partial<Slide>) { onChange(slides.map((item, index) => index === active ? { ...item, ...patch } : item)); }
+  function update(patch: Partial<Slide>) {
+    if (patch.text !== undefined && slide.features?.secrets?.length) {
+      const secrets = remapSecrets(slide.text, patch.text, slide.features.secrets);
+      patch.features = { ...slide.features, secrets };
+      if (secrets.length < slide.features.secrets.length) setSecretNotice('Eine bearbeitete Markierung wurde entfernt. Du kannst sie erneut markieren.');
+    }
+    onChange(slides.map((item, index) => index === active ? { ...item, ...patch } : item)); }
   function write(patch: Partial<WritingSettings>) { update({ writing: { ...writing, ...patch } }); }
   function move(direction: number) {
     const target = active + direction;
@@ -39,6 +48,14 @@ export default function ParticleEditor({ previewActive, slides, settings, engine
     engine?.emitTypingFlow(input.current?.getBoundingClientRect(), null);
     requestAnimationFrame(() => { input.current?.focus(); input.current?.setSelectionRange(start + emoji.length, start + emoji.length); });
   }
+  function markSecret() {
+    const { start, end } = selection.current;
+    const secrets = slide.features?.secrets ?? [];
+    if (start === end || !slide.text.slice(start, end).trim()) { setSecretNotice('Markiere zuerst ein Wort oder einen kurzen Bereich im Text.'); input.current?.focus(); return; }
+    if (secrets.length >= 4 || secrets.some(s => start < s.end && end > s.start)) { setSecretNotice('Bitte eine freie Textstelle markieren. Maximal vier Geheimnisse.'); return; }
+    update({ features: { ...slide.features, secrets: [...secrets, { start, end, text: '', returnAfter: 5000 }] } });
+    setSecretNotice('Markierung angelegt. Trage unter „Geheime Worte“ deine Zusatznachricht ein.');
+  }
   const preset = Object.entries(WRITING_PRESETS).find(([, p]) => Object.entries(p).every(([key, value]) => writing[key as keyof WritingSettings] === value))?.[0] ?? 'Eigene Werte';
   return <section className="editor" aria-label="Nachrichteneditor" aria-busy={busy}>
     <div className="editor-heading"><p data-particle="text" className="eyebrow">VON DIR. FÜR JEMANDEN.</p><h1 data-particle="hero">Was bleibt, sind Worte.</h1></div>
@@ -52,6 +69,8 @@ export default function ParticleEditor({ previewActive, slides, settings, engine
       <div data-particle="frame" className="text-field"><textarea ref={input} onSelect={event => { selection.current = { start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd }; }} onBlur={event => { selection.current = { start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd }; }} onKeyDown={event => { if (event.key.length === 1 || event.key === 'Backspace' || event.key === 'Enter') engine?.emitTypingFlow(input.current?.getBoundingClientRect(), null); }} id="message-text" value={slide.text} placeholder="Was du schon immer sagen wolltest …" disabled={busy} onChange={event => { update({ text: Array.from(event.target.value).slice(0, MAX_TEXT_LENGTH).join('') }); engine?.emitTypingFlow(input.current?.getBoundingClientRect(), null); }} /></div>
       <div className="text-toolbar"><div className="emoji-control"><button data-particle="button" aria-expanded={emojiOpen} aria-controls="emoji-picker" onClick={() => setEmojiOpen(!emojiOpen)} disabled={busy}>☺ Emoji</button>{emojiPresent && <div aria-hidden={!emojiOpen || undefined} inert={!emojiOpen} data-particle="frame" className={`emoji-picker ${!emojiOpen ? 'is-closing' : ''}`} id="emoji-picker" aria-label="Emoji auswählen" onKeyDown={event => { if (event.key === 'Escape') { setEmojiOpen(false); input.current?.focus(); } }}>{emojis.map(emoji => <button key={emoji} aria-label={`${emoji} einfügen`} onMouseDown={event => event.preventDefault()} onClick={() => insertEmoji(emoji)}>{emoji}</button>)}</div>}</div>
       <div className="slide-actions"><button data-particle="button" data-icon="left" aria-label="Abschnitt nach vorne" disabled={active === 0 || busy} onClick={() => move(-1)}>←</button><button data-particle="button" data-icon="arrow" aria-label="Abschnitt nach hinten" disabled={active === slides.length - 1 || busy} onClick={() => move(1)}>→</button><button data-particle="button" data-icon="close" aria-label="Abschnitt löschen" disabled={slides.length === 1 || busy} onClick={() => { onChange(slides.filter((_, index) => index !== active)); onSelect(Math.max(0, active - 1)); }}>×</button></div></div>
+      <button data-particle="button" className="mark-secret" disabled={busy} onMouseDown={event => event.preventDefault()} onClick={markSecret}>Auswahl geheim ◌</button>
+      {secretNotice && <p className="setting-note" role="status">{secretNotice}</p>}
       <div data-particle="line" className="particle-divider" />
       <div className="settings-group">
         <div className="control-row"><span data-particle="text">Schriftart</span><ParticleSelect label="Schriftart dieses Abschnitts" value={font} disabled={busy} onChange={value => update({ font: value as MessageFont })} options={FONTS.map(value => ({ value, label: FONT_LABELS[value], preview: <FontSample font={value} /> }))} /></div>
@@ -65,9 +84,10 @@ export default function ParticleEditor({ previewActive, slides, settings, engine
         const value = writing[item.key] ?? (item.key === 'commaPause' ? writing.punctuationPause * .45 : writing.punctuationPause);
         return <label className="range-control" key={item.key}><span><span data-particle="text">{item.label}</span><output data-particle="text">{Math.round(value)} ms</output></span><input data-particle="range" aria-label={item.label} type="range" min={item.min} max={item.max} step={item.step} disabled={busy} value={value} onChange={event => write({ [item.key]: Number(event.target.value) })} /></label>;
       })}</div></details>}
+      <SceneFeatureEditor slide={slide} settings={settings} busy={busy} update={features => update({ features })} onSettingsChange={onSettingsChange} />
       {error && <p data-particle="text" role="alert" className="error-message">{error}</p>}
       <div className="editor-bottom"><button data-particle="button" className="secondary" onClick={onPreview} disabled={busy}>Vorschau</button><button data-particle="button" className="primary" onClick={onSave} disabled={busy}>{busy ? 'Wird gespeichert …' : 'Link erstellen'}</button></div>
       <p data-particle="text" className="expiry-note">3 Tage gültig. Ohne Passwort zu öffnen.</p>
-    </div><LivePreview active={previewActive} engine={engine} slide={slide} settings={settings} /></div>
+    </div><LivePreview active={previewActive} engine={engine} slide={slide} settings={settings} onTest={onPreview} /></div>
   </section>;
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { OneLineEngine } from '../lines/OneLineEngine';
 import { EFFECTS, FONTS, WRITING_PRESETS } from '../types/message';
 
-test('line renderer preserves punctuation timing on resize, retracts, and cleans up its animation', async () => {
+test('particle renderer preserves punctuation timing on resize, retracts, and cleans up its animation', async () => {
   const original = new Map<string, PropertyDescriptor | undefined>();
   const mock = (key: string, value: unknown) => { original.set(key, Object.getOwnPropertyDescriptor(globalThis, key)); Object.defineProperty(globalThis, key, { configurable: true, writable: true, value }); };
   const frames = new Map<number, FrameRequestCallback>(); let frameId = 0, now = 0;
@@ -19,8 +19,8 @@ test('line renderer preserves punctuation timing on resize, retracts, and cleans
   mock('matchMedia', () => media);
   mock('requestAnimationFrame', (fn: FrameRequestCallback) => { frames.set(++frameId, fn); return frameId; });
   mock('cancelAnimationFrame', (id: number) => frames.delete(id));
-  let strokes = 0;
-  const ctx = { save() {}, restore() {}, translate() {}, rotate() {}, setTransform() {}, fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, quadraticCurveTo() {}, bezierCurveTo() {}, arc() {}, fill() {}, fillText() {}, stroke() { strokes++; } };
+  let strokes = 0, dots = 0;
+  const ctx = { save() {}, restore() {}, translate() {}, rotate() {}, setTransform() {}, fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, quadraticCurveTo() {}, bezierCurveTo() {}, arc() { dots++; }, fill() {}, fillText() {}, stroke() { strokes++; } };
   const canvas = { width: 0, height: 0, dataset: {} as Record<string, string>, getContext: () => ctx } as unknown as HTMLCanvasElement;
   let engine: OneLineEngine | undefined;
   try {
@@ -32,9 +32,9 @@ test('line renderer preserves punctuation timing on resize, retracts, and cleans
     browser.innerWidth = 390; events.get('resize')?.(); tick(300);
     assert.equal(canvas.dataset.visibleCharacters, '3', 'layout changes do not restart the punctuation clock');
     tick(formation); assert.equal(canvas.dataset.visibleCharacters, '6'); assert.equal(canvas.dataset.phase, 'holding');
-    assert.ok(strokes > 50, 'letters are drawn as paths');
-    engine.disperseText(); tick(700); assert.equal(canvas.dataset.phase, 'holding');
-    const beforeIdle = strokes; tick(1000); assert.equal(strokes, beforeIdle, 'no stray line remains after the text retracts');
+    assert.ok(dots > 50, 'letters are sampled from the original paths into visible dots');
+    engine.disperseText(); tick(1300); assert.equal(canvas.dataset.phase, 'holding');
+    const beforeIdle = dots; tick(1000); assert.equal(dots, beforeIdle, 'no stray points remain after the text disperses');
     for (const font of FONTS) for (const effect of EFFECTS) {
       const duration = engine.formText('Ä. Hi ❤️', { font, effect, writing: { enabled: true, ...WRITING_PRESETS.Schnell } });
       tick(duration + 20);
