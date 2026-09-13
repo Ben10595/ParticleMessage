@@ -1,3 +1,23 @@
+# Neue gemeinsame Particle Engine – 13. September 2026
+
+Die frühere Linien-Engine und die beiden separaten Partikelimplementierungen sind durch `particles/matter/` ersetzt. Ein persistenter TypedArray-Pool versorgt UI, Nachricht, Geschenk, Geheimnisse und Finale; WebGL2 zeichnet instanzierte Quads. Die neue Oberfläche verwendet dunkle Flächen, warme Goldakzente und gerasterte Partikelschrift. Der Editor behält native, zugängliche Bedienelemente.
+
+- Production Build mit TypeScript, ESLint und `git diff --check`: erfolgreich.
+- `npm test`: **26 Tests bestanden**. Die Tests der entfernten Engines wurden durch Prüfungen der tatsächlich verwendeten Pool-/Physik-/Samplingmodule ersetzt. Abdeckung: beständige IDs, begrenzte Budgets, Federkonvergenz bei 30/60/120 Hz, Rückkehr nach Cursorinteraktion, Hold/Reduced Motion, Geschenkflächen, Qualitätsregelung, Unicode und gespeicherte Einstellungen.
+- Vollständige Browser-Suite: **54 bestanden, 2 erwartete Desktop-Skips**. Chrome Desktop (1440 × 1000) und Chromium mit iPhone-13-Emulation. Die zwei Sensorprüfungen sind ausschließlich im mobilen Projekt aktiv.
+- Geprüft: Erstellerpasswort und signierte Sitzung, Erstellen/Bearbeiten/Reihenfolge/Emoji, alle Schriftarten, 23 Reveals plus Zufall, Live-Vorschau, Speichern/Kopieren, alte `/p/`- und neue `/m/`-Links, Ablauf/Offline/Fehler, Rätsel/Geschenk/Halten/Geheimnis/Finale/Wiederholung, Tastatur, Resize, 150-Zeichen-Umbrüche, Sensorfreigabe/-ablehnung, Reduced Motion, WebGL-Kontextverlust mit Wiederherstellung sowie echte Canvas2D- und HTML-Ausweichdarstellung.
+- Zusätzliche Sichtprüfung im In-App-Browser bei einfacher Pixeldichte: kleine Buttonschrift, Geschenk, Abbruch und Startseite. Subpixel-Kantenglättung und korrekt vormultipliziertes Alpha verhindern verschwindende beziehungsweise zu dunkle Punktbuchstaben. Lange Geheimtexte erhalten Unterstützung aus vorhandenen freien Partikeln, während die markierten Original-IDs erhalten bleiben.
+- Nach der Geheimtext- und Kantenglättungskorrektur: **14 betroffene Desktop-/Mobile-Browsertests erneut bestanden**.
+- Echte Supabase-Speicherung separat mit `scripts/check-storage.ts` überprüft: ein neutraler technischer Testdatensatz wurde erfolgreich gespeichert und zurückgelesen, einschließlich Partikeleinstellungen und Ablaufdatum. Keine persönlichen Inhalte, keine Schemaänderung, kein Deployment. Der Testdatensatz läuft nach 72 Stunden ab.
+
+Die Browser-Suite simuliert Supabase-Antworten und Sensorereignisse; der oben genannte Speichertest nutzt die echte Verbindung. Mobile-Tests sind Emulationen. Physische iOS-/Android-Geräte und leistungsschwache Hardware wurden nicht vermessen; 60 FPS sind ein Entwicklungsziel, keine geräteübergreifende Garantie. Die lokale Vorschau läuft unter `http://localhost:3201/`.
+
+Die direkte Quellcode- und Lizenzprüfung aller fünf vorgegebenen Repositories steht in [docs/OPEN_SOURCE_REVIEW.md](docs/OPEN_SOURCE_REVIEW.md). Keine Fremdengine oder Grafikbibliothek wurde eingebaut.
+
+Die folgenden Einträge dokumentieren frühere Entwicklungsstände und deren damalige Testergebnisse.
+
+---
+
 # Partikel-Erlebnisse – 13. September 2026
 
 Die sieben Erweiterungen sind in die vorhandene Website integriert: sechs zusätzliche Reveals (insgesamt 16 plus Zufall), reversibles Hold-to-Reveal, Multiple-Choice- und Code-Rätsel, drei Geschenkvarianten, optionale Handy-Neigung, lokale Geheimnisse und konfigurierbare Abschlussformen samt drei Endverhalten. Vorhandene Schriften, Routen, Zugangsschutz, Speicherung und 72-Stunden-Ablauf bleiben erhalten.

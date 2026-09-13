@@ -1,8 +1,9 @@
 'use client';
 import { useRef, useState } from 'react';
 import { MAX_SLIDES, MAX_TEXT_LENGTH, EFFECTS, EFFECT_LABELS, EFFECT_DESCRIPTIONS, FONTS, FONT_LABELS, WRITING_PRESETS, slideSettings, type Slide, type MessageSettings, type TransitionEffect, type WritingSettings, type MessageFont } from '@/types/message';
-import type { OneLineEngine as ParticleEngine } from '@/lines/OneLineEngine';
+import type { ParticleEngine } from '@/particles/matter/ParticleEngine';
 import SceneFeatureEditor from './SceneFeatureEditor';
+import ParticleStyleEditor from './ParticleStyleEditor';
 import { remapSecrets } from '@/types/experience';
 import LivePreview from './LivePreview';
 import ParticleSelect from './ParticleSelect';
@@ -58,7 +59,7 @@ export default function ParticleEditor({ previewActive, slides, settings, engine
   }
   const preset = Object.entries(WRITING_PRESETS).find(([, p]) => Object.entries(p).every(([key, value]) => writing[key as keyof WritingSettings] === value))?.[0] ?? 'Eigene Werte';
   return <section className="editor" aria-label="Nachrichteneditor" aria-busy={busy}>
-    <div className="editor-heading"><p data-particle="text" className="eyebrow">VON DIR. FÜR JEMANDEN.</p><h1 data-particle="hero">Was bleibt, sind Worte.</h1></div>
+    <div className="editor-heading"><p className="eyebrow">DEIN KLEINES ATELIER</p><h1>Mach einen Moment daraus.</h1><p className="editor-description">Ein Gedanke, eine Überraschung, ein Mensch, der sich freut.</p></div>
     <div className="editor-grid"><div className="editor-panel">
       <div className="section-heading"><span data-particle="text">Deine Abschnitte</span><span data-particle="text">{slides.length} / {MAX_SLIDES}</span></div>
       <nav className="slide-tabs" aria-label="Abschnitte">
@@ -84,6 +85,7 @@ export default function ParticleEditor({ previewActive, slides, settings, engine
         const value = writing[item.key] ?? (item.key === 'commaPause' ? writing.punctuationPause * .45 : writing.punctuationPause);
         return <label className="range-control" key={item.key}><span><span data-particle="text">{item.label}</span><output data-particle="text">{Math.round(value)} ms</output></span><input data-particle="range" aria-label={item.label} type="range" min={item.min} max={item.max} step={item.step} disabled={busy} value={value} onChange={event => write({ [item.key]: Number(event.target.value) })} /></label>;
       })}</div></details>}
+      <ParticleStyleEditor settings={settings} onChange={onSettingsChange} busy={busy} />
       <SceneFeatureEditor slide={slide} settings={settings} busy={busy} update={features => update({ features })} onSettingsChange={onSettingsChange} />
       {error && <p data-particle="text" role="alert" className="error-message">{error}</p>}
       <div className="editor-bottom"><button data-particle="button" className="secondary" onClick={onPreview} disabled={busy}>Vorschau</button><button data-particle="button" className="primary" onClick={onSave} disabled={busy}>{busy ? 'Wird gespeichert …' : 'Link erstellen'}</button></div>

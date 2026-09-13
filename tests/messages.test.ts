@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_FONT, DEFAULT_SETTINGS, EFFECTS, FONTS, slideSettings, validateMessage } from '../types/message';
 import { generateSlug, insertWithRetry, SLUG_PATTERN } from '../lib/messages';
-import { wrapText } from '../particles/textSampler';
 const valid = { version: 1 as const, slides: [{ text: ' Na du 👋 ', duration: 2200 }] };
 test('fonts and animations survive validation and saving, with compatible legacy defaults', async () => {
   assert.equal(slideSettings(valid.slides[0]).font, DEFAULT_FONT);
@@ -46,12 +45,4 @@ test('does not retry permission errors or insert invalid content', async () => {
   assert.equal(attempts, 1);
   await assert.rejects(insertWithRetry({ version: 1, slides: [] }, async () => { attempts++; return { error: null }; }));
   assert.equal(attempts, 1);
-});
-test('wraps explicit newlines and unbroken strings within the available width', () => {
-  const ctx = { measureText: (text: string) => ({ width: Array.from(text).length * 10 }) as TextMetrics };
-  for (const text of ['Eine längere Nachricht mit Worten', 'x'.repeat(150), '👋'.repeat(30), 'Na du\n\nAlles gut?']) {
-    const lines = wrapText(ctx, text, 80);
-    assert.ok(lines.every(line => ctx.measureText(line).width <= 80));
-  }
-  assert.deepEqual(wrapText(ctx, 'Na du\n\nHallo', 80), ['Na du', '', 'Hallo']);
 });

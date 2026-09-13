@@ -1,11 +1,11 @@
 'use client';
 import { useEffect, useRef } from 'react';
-import { OneLineEngine } from '@/lines/OneLineEngine';
-export default function ParticleCanvas({ onReady, onError }: { onReady: (engine: OneLineEngine | null) => void; onError: () => void }) {
+import { ParticleEngine } from '@/particles/matter/ParticleEngine';
+export default function ParticleCanvas({ onReady, onError }: { onReady: (engine: ParticleEngine | null) => void; onError: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    let engine: OneLineEngine | undefined;
-    try { engine = new OneLineEngine(canvas.current!); onReady(engine); }
+    let engine: ParticleEngine | undefined;
+    try { engine = new ParticleEngine(canvas.current!, () => { onReady(null); onError(); }); onReady(engine); }
     catch { onError(); }
     return () => { onReady(null); engine?.destroy(); };
   }, [onReady, onError]);

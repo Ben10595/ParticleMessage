@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, type RefObject } from 'react';
-import type { OneLineEngine as ParticleEngine } from '@/lines/OneLineEngine';
+import type { ParticleEngine } from '@/particles/matter/ParticleEngine';
 export function useParticleSurface(engine: ParticleEngine | null, surface: RefObject<HTMLElement | null>, scene: string, suspended = false) {
   useEffect(() => {
     const root = surface.current;

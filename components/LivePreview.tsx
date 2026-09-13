@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import type { OneLineEngine as ParticleEngine } from '@/lines/OneLineEngine';
+import type { ParticleEngine } from '@/particles/matter/ParticleEngine';
 import { FONT_LABELS, EFFECT_LABELS, slideSettings, type Slide, type MessageSettings } from '@/types/message';
 export default function LivePreview({ active, engine, slide, settings, onTest }: { onTest: () => void; active: boolean; engine: ParticleEngine | null; slide: Slide; settings: MessageSettings }) {
   const bounds = useRef<HTMLDivElement>(null);

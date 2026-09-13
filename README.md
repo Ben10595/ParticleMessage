@@ -1,6 +1,6 @@
 # ParticleMessage
 
-Eine deutschsprachige Nachrichten-Webanwendung mit Next.js App Router, TypeScript, einem selbst entwickelten Canvas-Partikelsystem und Supabase. Keine Konten, KI, Kamera, Mikrofon oder Partikelbibliothek.
+Eine deutschsprachige Nachrichten-Webanwendung mit Next.js App Router, TypeScript, einer eigenen modularen WebGL2-Partikelengine mit Canvas2D-Fallback und Supabase. Keine Konten, KI, Kamera, Mikrofon oder Partikelbibliothek.
 
 ## Lokal starten
 
@@ -24,9 +24,9 @@ PARTICLE_MESSAGE_PASSWORD=choose-a-password
 PARTICLE_MESSAGE_SESSION_SECRET=generate-a-long-random-value
 ```
 
-`PARTICLE_MESSAGE_PASSWORD` schützt Startseite und Editor. Nach erfolgreicher serverseitiger Prüfung setzt die App ein mit HMAC signiertes HttpOnly-Cookie mit zufälliger Nonce, SameSite=Strict und serverseitig geprüfter Frist von höchstens sieben Tagen. Es ist ein Browser-Sitzungscookie; in Production wird zusätzlich Secure gesetzt. Geteilte Routen unter `/p/[slug]` bleiben direkt und ohne Passwort erreichbar. Für `PARTICLE_MESSAGE_SESSION_SECRET` sollte pro Installation ein langer zufälliger Wert verwendet werden.
+`PARTICLE_MESSAGE_PASSWORD` schützt Startseite und Editor. Nach erfolgreicher serverseitiger Prüfung setzt die App ein mit HMAC signiertes HttpOnly-Cookie mit zufälliger Nonce, SameSite=Strict und serverseitig geprüfter Frist von höchstens sieben Tagen. Es ist ein Browser-Sitzungscookie; in Production wird zusätzlich Secure gesetzt. Geteilte Routen unter `/m/[slug]` und `/p/[slug]` bleiben direkt und ohne Passwort erreichbar. Für `PARTICLE_MESSAGE_SESSION_SECRET` sollte pro Installation ein langer zufälliger Wert verwendet werden.
 
-Es wird ausschließlich der öffentliche Publishable Key verwendet. Er ist absichtlich im Browser verfügbar. **Keinen Secret Key oder Service Role Key einsetzen.** Es gibt keine Auth-Sitzungen. Nach Änderungen an der Umgebung den Entwicklungsserver neu starten.
+Es wird ausschließlich der öffentliche Publishable Key verwendet. Er ist absichtlich im Browser verfügbar. **Keinen Secret Key oder Service Role Key einsetzen.** Es gibt keine Supabase-Auth-Sitzungen; der Erstellerzugang nutzt die separate signierte Passwort-Sitzung. Nach Änderungen an der Umgebung den Entwicklungsserver neu starten.
 
 ## Supabase
 
@@ -51,7 +51,7 @@ RLS muss aktiviert bleiben. Die vorhandenen Policies müssen der Rolle `anon` SE
 }
 ```
 
-`Link erstellen` validiert die Daten, erzeugt mit `crypto.getRandomValues` einen zwölfstelligen URL-sicheren Slug (72 Bit Zufall) und speichert `{ content, slug }`. Bei PostgreSQL-Fehler `23505` werden maximal fünf Slugs versucht. Die Route `/p/[slug]` fragt `content` und `created_at` für den exakt passenden Slug ab. Daten aus der Datenbank werden erneut validiert. Abfragen haben ein 15-Sekunden-Zeitlimit.
+`Link erstellen` validiert die Daten, erzeugt mit `crypto.getRandomValues` einen zwölfstelligen URL-sicheren Slug (72 Bit Zufall) und speichert `{ content, slug }`. Bei PostgreSQL-Fehler `23505` werden maximal fünf Slugs versucht. Die Routen `/m/[slug]` und `/p/[slug]` fragen `content` und `created_at` für den exakt passenden Slug ab. Daten aus der Datenbank werden erneut validiert. Abfragen haben ein 15-Sekunden-Zeitlimit.
 
 Die vorhandenen öffentlichen SELECT/INSERT-Policies sind **keine Zugriffskontrolle anhand des Links**: Nachrichten sind öffentlich lesbar und werden nicht verschlüsselt. Zufallsslugs erschweren das Erraten einzelner URLs. Ein Link läuft nach 72 Stunden ab; erneutes Speichern erzeugt einen neuen Link. Entwürfe bleiben während der geöffneten Sitzung im Speicher und werden erst beim Erstellen des Links gespeichert. Missbrauchsschutz und verbindliche serverseitige Größenlimits sollten für einen öffentlichen Betrieb zusätzlich in Supabase eingerichtet werden; Clientvalidierung allein kann direkte API-Aufrufe nicht begrenzen.
 
@@ -63,68 +63,79 @@ Keine neuen Environment Variables, Service-Role-Keys, Vercel-Cron-Endpunkte oder
 
 Grundlage: [Supabase Cron](https://supabase.com/docs/guides/cron/quickstart) und [restriktive RLS-Policies](https://supabase.com/docs/guides/database/postgres/row-level-security).
 
-## Schrift und Partikel
+## Eine gemeinsame Partikelwelt
 
-Das bestehende Layout, die dunkle Farbwelt, die vier eigenen Schriftgeometrien und die offenen Editorflächen bleiben erhalten. Große Beschriftungen, Konturen, Nachrichtentexte, Emoji, Geschenk und Finale werden als Punkte gezeichnet. Kleine Beschriftungen und Eingabefelder bleiben für Lesbarkeit und Bedienbarkeit native HTML-Elemente. Umlaute, Akzente, Satzzeichen und Unicode-Grapheme bleiben erhalten; lange Texte werden passend zum verfügbaren Platz umgebrochen und skaliert.
+Die Website wurde auf einen einzigen persistenten Partikelpool umgebaut. Startseite, Schaltflächen, Nachrichten, Geschenk und Finale verwenden denselben Renderer und dieselbe Simulation. Die beiden früheren Engines sowie unbenutzte Strichschrift-/Canvas-Subsysteme wurden entfernt.
 
-16 Reveals plus Zufallsauswahl stehen pro Abschnitt zur Verfügung: Linienfluss, Verstreut, Wirbel, Welle, Regen, Zusammenziehen, Sanft einblenden, Aufsteigen, Aufblühen, Schreibmaschine, Explosion, Spirale, Magnet, Zoom von außen, Von links nach rechts und Punkte einsammeln. Gespeicherte ältere Effektnamen bleiben lesbar. Schreibgeschwindigkeit und getrennte Satzzeichenpausen bleiben konfigurierbar. Die Haltezeit beginnt erst nach dem vollständigen Formen.
+- Dunkle, großzügige Oberfläche mit cremefarbenen und dezent goldenen Partikeln, weichen Kernen, kleinen Halos und einem interaktiven orbitalen Feld.
+- Texte entstehen durch echte Glyphraster auf einem unsichtbaren Canvas. Größe, Umbruch, Punktabstand und Dichte passen sich an den verfügbaren Platz an. UTF-16-Graphemgrenzen bleiben für Geheimnisse erhalten.
+- Vier Browser-Schriftfamilien: Klar (neuer Standard), Handschrift, Editorial und Mono. Der Editor zeigt dieselben Font-Stacks wie der Sampler. Explizit gespeicherte Schriftwahlen bleiben erhalten.
+- Ein fester Pool mit bis zu 18.000 Slots auf Desktop, 11.000 auf schmalen WebGL-Ansichten und 7.000 im Canvas-Fallback. Tatsächlich gezeichnet werden nur sichtbare Punkte. IDs, Positionen und Geschwindigkeiten bleiben beim Formenwechsel erhalten.
+- Federphysik mit Sekunden-Zeitbasis und Substeps bis 1/120 s. Maus-/Mehrfinger-Abstoßung oder Anziehung, geschwindigkeitsabhängiger Wind, Shockwaves, schwebende Ruhebewegung, Schwerkraft und Bewegungsspuren sind kombinierbar.
+- WebGL2 zeichnet instanzierte Quads in einem Draw Call. Die Shader erzeugen einen weichen Punktkern und geschwindigkeitsabhängige Spuren. Der gebündelte Canvas2D-Fallback verwendet dieselbe Simulation.
+- Automatische Qualitätsanpassung mit Hysterese, DPR-Begrenzung, pausierter Animation in unsichtbaren Tabs und WebGL-Context-Recovery. Bei fehlendem Canvas bleibt eine funktionale HTML-Darstellung verfügbar.
 
-Die Live-Vorschau zeigt Schrift und Reveal mit dem bestehenden Debouncing. „Gesamtes Erlebnis testen“ bzw. „Vorschau“ spielt alle Abschnitte einschließlich ihrer Interaktionen und des Finales ab. Escape und × kehren mit erhaltenem Entwurf zum Editor zurück.
+## Editor und Szenen
 
-## Optionale Erlebnisse
+Bis zu 15 Abschnitte mit je 150 Zeichen. Hinzufügen, Löschen und Verschieben erfolgen mit zugänglichen Schaltflächen. Die Live-Vorschau zeigt Änderungen nach kurzem Debouncing. „Vorschau“ spielt denselben `ScenePlayer` wie der öffentliche Link; Escape/× kehrt mit erhaltenem Entwurf zurück.
 
-Im Editor lassen sich unter „Diesen Abschnitt besonders machen“ die Extras je Abschnitt kombinieren. Die Reihenfolge ist **Rätsel → Geschenk → Reveal → Nachricht und Geheimnisse**. Nicht aktivierte Schritte werden übersprungen.
+23 Reveal-Verfahren plus Zufallsauswahl: Formwechsel, Verstreut, Wirbel, Welle, Regen, Zusammenziehen, Einblenden, Aufsteigen, Aufblühen, Schreibmaschine, Explosion, Spirale, Magnet, Zoom, Von links nach rechts, Punkte einsammeln, Portal, Gravity Drop, Shockwave, Dust Assemble, Orbit Assemble, Random Chaos und Pixel Sweep. Jeder Abschnitt besitzt seinen eigenen Übergang, seine Schrift und optional Schreibrhythmus/Satzzeichenpausen. Die Lesedauer beginnt erst nach dem Formieren.
 
-- **Gedrückt halten:** Touch, primäre Maustaste, Leertaste oder Enter sammeln die Punkte über etwa 2,6 Sekunden. Loslassen lässt sie langsamer zurückdriften. Vollständig enthüllt bleibt der Text für seine Haltezeit stabil. Pointer-Abbruch, Fokusverlust und Hintergrundwechsel lösen das Halten zuverlässig. Bei reduzierter Bewegung genügt ein bewusster Tipp oder Tastendruck.
-- **Rätsel:** Frage mit zwei bis vier unterschiedlichen Antworten und markierter richtiger Lösung oder Zahlencode mit zwei bis acht Ziffern. Führende Nullen bleiben erhalten. Falsche Antworten lassen beliebig viele weitere Versuche zu. Die Nachricht wird vorher weder als sichtbarer HTML-Text noch über den Screenreader enthüllt.
-- **Geschenk:** Partikelbox mit eigenem Deckel und Schleife. Öffnen per Antippen, Klick oder Tastatur. Varianten: Schleife & Licht, Sternenstaub und umlaufende Punkte.
-- **Handy-Neigung:** Optional global als Standard und pro Abschnitt überschreibbar. Auf unterstützten Touch-Geräten bietet der Viewer „Neigung aktivieren“ an. Eine vom Browser verlangte Berechtigung wird ausschließlich nach dieser Aktion angefragt. Ablehnung oder fehlende Sensoren blockieren die Nachricht nicht. Der erste Sensorwert kalibriert die Bewegung; Orientierung wird berücksichtigt. Gelesener Text wird höchstens um 0,65 CSS-Pixel je Achse verschoben. Bei reduzierter Bewegung wird die Neigung deaktiviert.
-- **Geheime Worte:** Im Text einen Bereich markieren und „Auswahl geheim“ wählen. Bis zu vier Zusatztexte mit je höchstens 100 Zeichen. Markierte Wörter erhalten im Viewer eine dezente Punktunterstreichung und tastaturbedienbare Trefferflächen. Nur ihre Punkte formen den Zusatztext; die übrige Nachricht bleibt bestehen. Rückkehr automatisch oder per Taste. Abschnitte mit Geheimnissen bleiben bis „Weiter“ offen. Textänderungen vor einer Markierung verschieben sie mit; Änderungen innerhalb entfernen die betroffene Markierung mit einem Hinweis.
-- **Abschluss:** Unter „Für die ganze Nachricht“ aktivieren. Nach der letzten Szene fliegen die Punkte auseinander und bilden Herz, Stern, Unendlichkeit oder bis zu 80 Zeichen eigenen Text. Haltezeit 2–10 Sekunden, anschließend Verblassen, Weiterschweben oder Explosion. Beim Weiterschweben bleibt die Form hinter dem Wiederholen-Button erhalten. Die Gesamtvorschau kehrt anschließend zum Editor zurück.
+Unter „Die Partikelwelt“ stehen Dichte, Animationsgeschwindigkeit (0,5–2×), Feder/Soft Float/Magnetic/Explosive, Berührungsmodus und kombinierbare Bewegungs-/Wind-/Gravitationseffekte bereit. Diese Einstellungen werden mitgespeichert.
 
-Rätsel und versteckte Texte sind Teil der Inszenierung. Wie bisher stehen Inhalte im öffentlichen JSONB-Datensatz; sie sind keine Verschlüsselung oder serverseitige Zugriffssperre.
+Die optionalen Interaktionen werden in der Reihenfolge **Rätsel → Geschenk → Hold/Reveal → Nachricht/Geheimnisse → nächste Szene → Finale** abgespielt:
+
+- **Rätsel:** zwei bis vier Antworten oder Zahlencode mit zwei bis acht Ziffern. Führende Nullen bleiben erhalten. Fehler erzeugen eine kleine Partikelwelle; erneute Versuche bleiben möglich.
+- **Geschenk:** isometrische Punktflächen, eigener Deckel und Schleife. Öffnen per Touch, Klick oder Tastatur, Lichtimpuls und Explosion, danach sammeln sich die Partikel zur Nachricht.
+- **Hold to Reveal:** über etwa 2,6 Sekunden gedrückt halten, loslassen lässt die Punkte langsamer zurückdriften. Sichtbarer Fortschritt und sanfter Hintergrund-Glow. Vollständig enthüllt bleibt die Nachricht sichtbar. Pointer-Abbruch, Fokusverlust und Hintergrundwechsel lösen das Halten. Reduzierte Bewegung braucht weiterhin eine bewusste Geste.
+- **Geheime Worte:** Text im Eingabefeld markieren und „Auswahl geheim“ wählen. Bis zu vier Zusatztexte. Die zugehörigen Partikel ziehen nach vorne; übriger Text wird gedimmt. Rückkehr stellt die ursprünglichen Ziele derselben Punkte wieder her. Geheimnisse sind per Tastatur erreichbar. Textänderungen verschieben oder entfernen betroffene Markierungen korrekt.
+- **Neigung:** optionale Smartphone-Parallaxe, erst nach direkter Aktivierung. Kalibrierung und Orientierung werden berücksichtigt. Gelesener Text bewegt sich maximal 0,5 CSS-Pixel pro Achse; freie Punkte deutlich mehr. Ohne Sensor oder Freigabe ist die Experience vollständig bedienbar.
+- **Finale:** Materie zieht in ein Portal, verdichtet sich, hält kurz inne, explodiert mit Shockwave und formt Herz, Stern, Unendlichkeit oder eigenen Text. Endverhalten: Weiterschweben, Verblassen oder Explosion.
+
+Kleine Beschriftungen und Eingabefelder bleiben natives HTML für Lesbarkeit, Tastatur und Screenreader. Große Texte und Erlebnisformen sind Partikel. Rätsel/Geheimnisse sind Inszenierungen im öffentlichen JSON, keine Verschlüsselung.
 
 ## Architektur und Speicherformat
 
-Die vorhandene Tabelle und Formatversion 1 werden weiterverwendet; **keine neue Datenbankmigration** ist nötig. Neue Felder sind optional und werden beim Speichern und Laden strikt validiert. Unbekannte Zusatzfelder werden verworfen. Bestehende Links ohne Extras spielen wie gewohnt automatisch ab.
+Neue aktive Module unter `particles/matter/`:
+
+| Modul | Aufgabe |
+| --- | --- |
+| `ParticleEngine.ts` | einziger RAF, Gruppenkoordination, Holds, Geheimnisse, Zeit/Abbruch, Context-Recovery |
+| `MorphSystem.ts` | feste TypedArrays und räumliche Zielzuordnung in O(n log n) |
+| `PhysicsSystem.ts` | Federn, Reveal-Pfade, Kräfte und Interaktion |
+| `ParticleRenderer.ts` | WebGL2-Instancing, eigener Shader, Canvas2D-Fallback |
+| `TextSampler.ts` | Glyphraster, mehrzeiliges Layout, Cache, Text-/Bildtargets |
+| `ShapeSampler.ts` | räumliches Geschenk und Finaleformen |
+| `InteractionSystem.ts` | Pointer, Mehrfinger-Eingaben, begrenzte Shockwaves, Cleanup |
+| `QualityManager.ts` | gemessene Qualität mit Hysterese |
+
+`lib/ScenePlayer.ts` steuert die gemeinsame Sequenz für Vorschau und Empfänger. `types/message.ts` und `types/experience.ts` validieren alle gespeicherten Inhalte. `DeviceTilt.tsx` kapselt den optionalen Sensorzugriff.
+
+Formatversion 1 und die vorhandene JSONB-Spalte werden weiterverwendet. Keine neue Migration. `settings.particles` ist optional; alte Nachrichten bleiben lesbar. Neue Links verwenden `/m/<slug>`; bestehende `/p/<slug>`-Links bleiben direkt erreichbar.
 
 ```json
 {
   "version": 1,
   "slides": [{
-    "text": "Hallo Welt.",
-    "duration": 3000,
-    "font": "handwriting",
-    "effect": "spiral",
-    "features": {
-      "hold": true,
-      "gift": "ribbon",
-      "tilt": true,
-      "puzzle": { "kind": "code", "question": "Unser Code?", "code": "007" },
-      "secrets": [{ "start": 0, "end": 5, "text": "Nur für dich.", "returnAfter": 5000 }]
-    }
+    "text": "Hallo Welt.", "duration": 3000, "font": "classic", "effect": "portal",
+    "features": { "hold": true, "gift": "ribbon", "secrets": [{ "start": 0, "end": 5, "text": "Nur für dich.", "returnAfter": 5000 }] }
   }],
   "settings": {
-    "effect": "morph",
-    "finale": true,
+    "effect": "morph", "finale": true,
     "writing": { "enabled": false, "speed": 75, "punctuationPause": 420, "paragraphPause": 800 },
+    "particles": { "density": "balanced", "speed": 1, "preset": "spring", "interaction": "repel", "trails": true, "ripples": true, "wind": false, "gravity": false },
     "finaleConfig": { "shape": "heart", "ending": "float", "duration": 4000 }
   }
 }
 ```
 
-`secrets.start/end` sind UTF-16-Offsets wie bei Textarea-Auswahlen. Der Validator schützt Graphemgrenzen, prüft Überlappungen und passt Offsets beim Trimmen an. `returnAfter: 0` bedeutet manuelle Rückkehr. Rätselantworten werden über den nullbasierten Index `correct` bestimmt. Deaktivierte Finales brauchen keine vollständig ausgefüllte Abschlusskonfiguration.
+## Open-Source-Prüfung
 
-- `lines/OneLineEngine.ts`: Bestehender Canvas-Lebenszyklus, UI-Konturen, Schriftlayout, Timing und Koordination des Partikel-Pools.
-- `particles/SceneParticles.ts`: Wiederverwendung von Punkten, Glyph-Sampling, Geschenk- und Abschlussformen, lokale Geheimnisse und gebündeltes Zeichnen.
-- `particles/reveal.ts`: Reproduzierbare, kontinuierliche Reveal-Pfade und reversible Hold-Fortschritte mit exakt ruhenden Endpunkten.
-- `lib/ScenePlayer.ts`: Gemeinsame abbrechbare Szenenfolge für Vorschau und öffentliche Wiedergabe, Interaktionsschritte und Lesepausen.
-- `types/experience.ts`: Optionale Datenmodelle, Validierung und Anpassung von Textmarkierungen.
-- `components/SceneFeatureEditor.tsx`, `SceneControls.tsx`, `DeviceTilt.tsx`: Editoreinstellungen, zugängliche Bedienung und Sensorzugriff.
+Alle fünf ausdrücklich genannten GitHub-Repositories wurden **vor** der Implementierung direkt geklont und untersucht. Commitstände, konkrete Dateien, Lizenzbefunde, technische Vergleiche und Übernahmeentscheidungen stehen in [docs/OPEN_SOURCE_REVIEW.md](docs/OPEN_SOURCE_REVIEW.md).
 
-Es bleibt bei einem Canvas und einem requestAnimationFrame-Zyklus. Nachrichten-Geometrie entsteht bei Text- oder Layoutänderungen, niemals pro Frame. Der Nachrichten-Pool ist auf 4.200 Punkte auf schmalen Displays und 7.000 auf Desktop begrenzt; Schrift- und Emoji-Sampling wird zwischengespeichert. Die Canvas-Auflösung ist auf DPR 2 begrenzt. Gebündelte Zeichenaufrufe vermeiden Glow-Filter pro Punkt. Partikel der kleinen Live-Vorschau werden auf deren Fläche begrenzt. Unsichtbare Tabs pausieren die Animationszeit; alle Listener und wartenden Schritte werden bei Abbruch aufgeräumt. Ohne Canvas bleiben auch Rätsel, Geschenk, Halten und Geheimnisse über HTML bedienbar.
+Wichtig: ParticleFX enthält im geprüften Stand keine LICENSE-Datei; Particles Playground hat eine von der MIT-Angabe im README abweichende `LICENCE` mit Benachrichtigungspflicht. Aus beiden wurde kein Code übernommen. Auch die anderen Projekte dienen als technische Referenzen; die neue Engine, Shader und Formen wurden eigenständig geschrieben. Keine fünf Partikelbibliotheken, Fremdassets oder zusätzliche Grafikabhängigkeiten.
 
-## Prüfungen
+## Prüfen
 
 ```sh
 npm run typecheck
@@ -132,10 +143,13 @@ npm run lint
 npm test
 npm run build
 npm run test:browser
-npm start
 ```
 
-Unit-Tests prüfen Format, Unicode, Slugs, Authentifizierung, Pausen, Ablaufgrenzen und Partikelbewegungen. Die Browser-Tests verwenden Chrome, starten den Production-Build mit ausschließlich lokalen Test-Zugangsdaten und simulieren Supabase-Antworten. Der Testserver läuft isoliert auf Port 3200. Der echte Supabase-Rundlauf wurde zusätzlich geprüft; Details stehen in `TESTING.md`. Die entfernte SQL-Migration wurde nicht verändert oder ausgeführt.
+Die Browser-Suite startet einen isolierten Production-Server auf Port 3200 mit lokalen Testzugangsdaten, Desktop Chrome und iPhone-13-Viewport. Supabase-Antworten und Sensorereignisse sind dort simuliert. Sie prüft auch WebGL-Contextverlust/-Wiederherstellung, den echten Canvas2D-Renderer ohne WebGL und den HTML-Fallback ohne Canvas.
+
+Der optionale `scripts/check-storage.ts`-Integrationstest erzeugt **einen echten neutralen Testdatensatz** und lädt ihn über dieselbe Supabase-Anbindung wieder. Nur bewusst mit `node --env-file=.env.local --import tsx scripts/check-storage.ts` ausführen. Der Datensatz läuft regulär nach 72 Stunden ab; der Test verändert keine bestehenden Daten oder Tabellenrechte.
+
+Aktuelle Prüfergebnisse und Grenzen stehen in [TESTING.md](TESTING.md). Physische iOS-/Android-Geräte und reale Low-End-GPUs müssen separat gemessen werden; Browser-Emulation allein garantiert keine 60 FPS auf jeder Hardware.
 
 ## Deployment auf Vercel
 

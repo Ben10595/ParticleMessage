@@ -17,7 +17,7 @@ test('puzzle, gift, reversible hold, localized secret, finale and replay share o
   await page.screenshot({ path: `test-results/features-puzzle-${info.project.name}.png` });
   await page.getByRole('button', { name: '01 Am Meer' }).click();
   await expect(page.getByRole('button', { name: 'Geschenk öffnen' })).toBeVisible();
-  await page.waitForTimeout(1300);
+  await page.waitForTimeout(2100);
   await page.screenshot({ path: `test-results/features-gift-${info.project.name}.png` });
   await page.getByRole('button', { name: 'Geschenk öffnen' }).click();
   await expect(held).toBeVisible();
@@ -30,7 +30,8 @@ test('puzzle, gift, reversible hold, localized secret, finale and replay share o
   await expect(canvas).toHaveAttribute('data-hold-progress', '1.000');
   await page.getByRole('button', { name: 'Geheimnis in „Hallo“ öffnen' }).click();
   await expect(page.locator('[data-stage="secret"]')).toBeAttached();
-  await page.waitForTimeout(900);
+  await expect.poll(async () => Number(await canvas.getAttribute('data-secret-target-count'))).toBeGreaterThan(600);
+  await page.waitForTimeout(1600);
   await page.screenshot({ path: `test-results/features-secret-${info.project.name}.png` });
   await page.setViewportSize({ width: info.project.name === 'mobile' ? 420 : 1280, height: 850 });
   await expect(page.getByRole('button', { name: 'Zur Nachricht zurück' })).toBeVisible();

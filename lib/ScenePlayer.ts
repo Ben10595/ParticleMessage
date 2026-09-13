@@ -1,4 +1,4 @@
-import type { OneLineEngine } from '../lines/OneLineEngine';
+import type { ParticleEngine as OneLineEngine } from '../particles/matter/ParticleEngine';
 import { DEFAULT_SETTINGS, slideSettings, type MessageSettings, type Slide } from '../types/message';
 import { DEFAULT_FINALE } from '../types/experience';
 import { advanceHold } from '../particles/reveal';
@@ -29,7 +29,7 @@ export class ScenePlayer {
     const puzzle = this.slide?.features?.puzzle;
     if (!puzzle || this.stage.phase !== 'puzzle') return;
     if (puzzle.kind === 'choice' ? value === puzzle.correct : String(value).trim() === puzzle.code) this.action?.();
-    else this.show('puzzle', puzzle.question, { error: 'Noch nicht ganz. Versuch es noch einmal.' });
+    else { this.engine?.shockwave(.5); this.show('puzzle', puzzle.question, { error: 'Noch nicht ganz. Versuch es noch einmal.' }); }
   }
   openGift() { if (this.stage.phase === 'gift') this.action?.(); }
   setHeld(pressed: boolean) { this.pressed = pressed; this.engine?.setHeld(pressed); }
@@ -62,6 +62,7 @@ export class ScenePlayer {
     }
   }
   async run(slides: Slide[], settings: MessageSettings = DEFAULT_SETTINGS) {
+    this.engine?.configure(settings);
     const stopHold = () => this.setHeld(false);
     window.addEventListener('blur', stopHold); document.addEventListener('visibilitychange', stopHold);
     try {
@@ -95,7 +96,10 @@ export class ScenePlayer {
       }
       if (settings.finale) {
         const finale = settings.finaleConfig ?? DEFAULT_FINALE;
-        this.show('finale', ''); this.engine?.disperseText(1.6); await this.wait(this.engine?.reducedMotion ? 0 : 650, this.signal);
+        this.show('finale', '');
+        this.engine?.portal(); await this.wait(this.engine?.reducedMotion ? 0 : 1250, this.signal);
+        await this.wait(this.engine?.reducedMotion ? 0 : 220, this.signal);
+        this.engine?.shockwave(2); this.engine?.disperseText(2.6); await this.wait(this.engine?.reducedMotion ? 0 : 650, this.signal);
         const formation = finale.shape === 'text' ? this.engine?.formText(finale.text ?? 'Für dich.', { ...slideSettings(slides.at(-1)!, settings), writing: { ...settings.writing, enabled: false }, effect: 'spiral' }) : this.engine?.formShape(finale.shape);
         this.show('finale', finale.shape === 'text' ? finale.text ?? 'Für dich.' : { heart: 'Ein Herz für dich.', star: 'Ein Stern für dich.', infinity: 'Für immer.' }[finale.shape]);
         await this.wait((formation ?? 0) + finale.duration, this.signal);

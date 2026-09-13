@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import type { OneLineEngine } from '@/lines/OneLineEngine';
+import type { ParticleEngine as OneLineEngine } from '@/particles/matter/ParticleEngine';
 type OrientationAPI = typeof DeviceOrientationEvent & { requestPermission?: () => Promise<'granted' | 'denied'> };
 export default function DeviceTilt({ engine, enabled }: { engine: OneLineEngine | null; enabled: boolean }) {
   const [status, setStatus] = useState<'hidden' | 'ready' | 'requesting' | 'active' | 'denied' | 'unavailable'>('hidden');

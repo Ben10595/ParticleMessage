@@ -35,7 +35,7 @@ test('font and animation choices preview, follow their section and survive the s
   await expect(canvas).toHaveAttribute('data-text-effect', 'bloom');
   await page.getByRole('button', { name: 'Abschnitt hinzufügen', exact: true }).click();
   await page.getByRole('textbox', { name: 'ABSCHNITT 02' }).fill('Zweiter Gedanke.');
-  await expect(page.getByRole('combobox', { name: 'Schriftart dieses Abschnitts' })).toHaveText('Handschrift');
+  await expect(page.getByRole('combobox', { name: 'Schriftart dieses Abschnitts' })).toHaveText('Klar');
   await select(page, 'Schriftart dieses Abschnitts', 'Mono');
   await select(page, 'Animation dieses Abschnitts', 'Schreibmaschine');
   await page.getByRole('button', { name: 'Abschnitt nach vorne' }).click();
@@ -73,7 +73,7 @@ test('password rejection, signed httpOnly session, reload, and shared canvas acr
   await expect(page.getByRole('main').getByRole('alert')).toHaveText('Falsches Passwort.');
   await page.getByLabel('Passwort', { exact: true }).fill('particle-test');
   await page.getByRole('button', { name: 'Öffnen', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Schreib etwas.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Kleine Worte. Großes Gefühl.' })).toBeVisible();
   expect(await canvas?.evaluate(el => el === document.querySelector('canvas'))).toBe(true);
   const cookie = (await context.cookies()).find(c => c.name === 'particle_message_access');
   expect(cookie?.httpOnly).toBe(true); expect(cookie?.sameSite).toBe('Strict'); expect(cookie?.secure).toBe(true);
@@ -110,7 +110,7 @@ test('per-slide writing, emoji insertion at cursor, ordering, preview, save and 
   await page.route('**/rest/v1/messages*', async route => { saved = route.request().postDataJSON(); await route.fulfill({ status: 201, body: '' }); });
   await page.getByRole('button', { name: 'Link erstellen', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Deine Nachricht ist bereit.' })).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'Link zu deiner Nachricht' })).toHaveValue(/\/p\/[A-Za-z0-9_-]{12}$/);
+  await expect(page.getByRole('textbox', { name: 'Link zu deiner Nachricht' })).toHaveValue(/\/m\/[A-Za-z0-9_-]{12}$/);
   expect(saved?.content).toMatchObject({ slides: [{ text: 'Du bist wunderbar. ✨' }, { effect: 'wave', writing: { enabled: true, speed: 115, questionPause: 1000 } }] });
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.getByRole('button', { name: 'Link kopieren', exact: true }).click();
@@ -145,22 +145,10 @@ test('live preview uses writing, hold duration, and the same particle renderer',
   await expect(page.locator('canvas')).toHaveAttribute('data-visible-characters', '6');
   await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
   expect(await page.locator('canvas').count()).toBe(1);
-  await expect(page.locator('canvas')).toHaveAttribute('data-renderer', 'particles');
+  await expect(page.locator('canvas')).toHaveAttribute('data-renderer', 'webgl2');
   expect(Number(await page.locator('canvas').getAttribute('data-line-point-count'))).toBeLessThan(12000);
   expect(Number(await page.locator('canvas').getAttribute('data-ui-target-count'))).toBeGreaterThan(100);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  if (testInfo.project.name === 'desktop') {
-    const brightestCores = await page.locator('.preview-bounds').evaluateAll(elements => elements.map(element => {
-      const rect = element.getBoundingClientRect();
-      const canvas = document.querySelector('canvas')!;
-      const dpr = canvas.width / innerWidth;
-      const pixels = canvas.getContext('2d')!.getImageData(Math.round(rect.x * dpr), Math.round(rect.y * dpr), Math.round(rect.width * dpr), Math.round(rect.height * dpr)).data;
-      let brightest = 0;
-      for (let i = 0; i < pixels.length; i += 4) brightest = Math.max(brightest, pixels[i]);
-      return brightest;
-    }));
-    for (const core of brightestCores) expect(core).toBeGreaterThanOrEqual(220);
-  }
   await page.screenshot({ path: `test-results/editor-${testInfo.project.name}.png` });
   await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'dispersing', { timeout: 8000 });
 });
@@ -231,6 +219,10 @@ test('150-character message wraps legibly within desktop and mobile canvas', asy
   await expect(page.locator('.viewer-text')).toHaveText(text);
   await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const bounds = JSON.parse((await page.locator('canvas').getAttribute('data-text-bounds'))!);
+  const viewport = page.viewportSize()!;
+  expect(bounds.left).toBeGreaterThan(0); expect(bounds.right).toBeLessThan(viewport.width);
+  expect(bounds.top).toBeGreaterThan(0); expect(bounds.bottom).toBeLessThan(viewport.height - 60);
   await page.screenshot({ path: `test-results/long-text-${testInfo.project.name}.png` });
 });
 
@@ -239,7 +231,7 @@ test('custom selects support keyboard navigation, escape, typeahead and outside 
   await unlock(page);
   const combo = page.getByRole('combobox', { name: 'Animation dieses Abschnitts' });
   await combo.focus(); await combo.press('Enter');
-  await expect(page.getByRole('option', { name: 'Linienfluss' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('option', { name: 'Formwechsel' })).toHaveAttribute('aria-selected', 'true');
   await combo.press('ArrowDown'); await combo.press('Enter');
   await expect(combo).toHaveText('Verstreut');
   await combo.press('Enter'); await combo.press('End'); await combo.press('Escape');

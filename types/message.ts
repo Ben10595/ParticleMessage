@@ -1,26 +1,33 @@
 import { validateFeatures, validateFinale, type SceneFeatures, type Finale } from './experience';
 // Version 1 remains readable: new per-slide settings are optional.
-export const EFFECTS = ['morph', 'scatter', 'vortex', 'wave', 'rain', 'implode', 'fade', 'rise', 'bloom', 'typewriter', 'explosion', 'spiral', 'magnet', 'zoom', 'sweep', 'collect', 'random'] as const;
+export const EFFECTS = ['morph', 'scatter', 'vortex', 'wave', 'rain', 'implode', 'fade', 'rise', 'bloom', 'typewriter', 'explosion', 'spiral', 'magnet', 'zoom', 'sweep', 'collect', 'portal', 'gravity', 'shockwave', 'dust', 'orbit', 'chaos', 'pixel', 'random'] as const;
 const LEGACY_EFFECTS = ['outward'] as const;
 export type TransitionEffect = typeof EFFECTS[number] | typeof LEGACY_EFFECTS[number];
-export const EFFECT_LABELS: Record<TransitionEffect, string> = { morph: 'Linienfluss', scatter: 'Verstreut', vortex: 'Wirbel', wave: 'Welle', rain: 'Regen', implode: 'Zusammenziehen', fade: 'Sanft einblenden', rise: 'Aufsteigen', bloom: 'Aufblühen', typewriter: 'Schreibmaschine', random: 'Zufall', explosion: 'Explosion', spiral: 'Spirale', magnet: 'Magnet', zoom: 'Zoom von außen', sweep: 'Von links nach rechts', collect: 'Punkte einsammeln', outward: 'Verstreut' };
+export const EFFECT_LABELS: Record<TransitionEffect, string> = { morph: 'Formwechsel', scatter: 'Verstreut', vortex: 'Wirbel', wave: 'Welle', rain: 'Regen', implode: 'Zusammenziehen', fade: 'Sanft einblenden', rise: 'Aufsteigen', bloom: 'Aufblühen', typewriter: 'Schreibmaschine', random: 'Zufall', explosion: 'Explosion', spiral: 'Spirale', magnet: 'Magnet', zoom: 'Zoom von außen', sweep: 'Von links nach rechts', collect: 'Punkte einsammeln', portal: 'Portal', gravity: 'Gravity Drop', shockwave: 'Shockwave', dust: 'Dust Assemble', orbit: 'Orbit Assemble', chaos: 'Random Chaos', pixel: 'Pixel Sweep', outward: 'Verstreut' };
 export const EFFECT_DESCRIPTIONS: Record<TransitionEffect, string> = {
-  morph: 'Deine Worte entstehen ruhig, Strich für Strich.', scatter: 'Die Buchstaben finden aus verschiedenen Richtungen zusammen.',
+  morph: 'Dieselben Punkte wandern weich von einer Form in die nächste.', scatter: 'Die Buchstaben finden aus verschiedenen Richtungen zusammen.',
   vortex: 'Ein kleiner Schwung dreht jeden Buchstaben an seinen Platz.', wave: 'Eine sanfte Welle trägt deine Worte in die Zeile.',
   rain: 'Die Buchstaben fallen behutsam von oben ein.', implode: 'Weite Formen ziehen sich zu deinen Worten zusammen.',
   fade: 'Die Buchstaben erscheinen weich aus der Dunkelheit.', rise: 'Deine Worte schweben sanft nach oben.',
   bloom: 'Jeder Buchstabe wächst auf und kommt zur Ruhe.', typewriter: 'Ein Zeichen nach dem anderen – wie auf einer Schreibmaschine.',
-  random: 'Bei jedem Abspielen überrascht eine andere Animation.', explosion: 'Ein Funkenstoß fliegt auseinander und findet als Text zusammen.', spiral: 'Punkte kreisen spiralförmig in deine Worte.', magnet: 'Deine Worte ziehen die Punkte wie ein Magnet an.', zoom: 'Punkte kommen von weit außen und rasten sanft ein.', sweep: 'Ein Lichtband baut deine Worte von links nach rechts auf.', collect: 'Verstreute Punkte sammeln sich nach und nach zu deiner Nachricht.', outward: 'Die Buchstaben finden aus verschiedenen Richtungen zusammen.',
+  random: 'Bei jedem Abspielen überrascht eine andere Animation.', explosion: 'Ein Funkenstoß fliegt auseinander und findet als Text zusammen.', spiral: 'Punkte kreisen spiralförmig in deine Worte.', magnet: 'Deine Worte ziehen die Punkte wie ein Magnet an.', zoom: 'Punkte kommen von weit außen und rasten sanft ein.', sweep: 'Ein Lichtband baut deine Worte von links nach rechts auf.', collect: 'Verstreute Punkte sammeln sich nach und nach zu deiner Nachricht.', portal: 'Ein leuchtender Strudel sammelt die Punkte im Zentrum.', gravity: 'Punkte fallen nach unten und federn in ihre Buchstaben zurück.', shockwave: 'Eine Druckwelle läuft durch die entstehende Nachricht.', dust: 'Feiner Sternenstaub verdichtet sich zu deinen Worten.', orbit: 'Punkte umkreisen ihre neue Form, bevor sie zur Ruhe kommen.', chaos: 'Lebendige, unregelmäßige Bahnen finden zu klarem Text.', pixel: 'Ein Raster baut deine Worte von links nach rechts auf.', outward: 'Die Buchstaben finden aus verschiedenen Richtungen zusammen.',
 };
 export const FONTS = ['handwriting', 'classic', 'editorial', 'mono'] as const;
 export type MessageFont = typeof FONTS[number];
-export const DEFAULT_FONT: MessageFont = 'handwriting';
+export const DEFAULT_FONT: MessageFont = 'classic';
 export const FONT_LABELS: Record<MessageFont, string> = { handwriting: 'Handschrift', classic: 'Klar', editorial: 'Editorial', mono: 'Mono' };
 export interface WritingSettings {
   enabled: boolean; speed: number; punctuationPause: number; paragraphPause: number;
   commaPause?: number; periodPause?: number; questionPause?: number; exclamationPause?: number;
 }
-export interface MessageSettings { effect: TransitionEffect; finale: boolean; writing: WritingSettings; font?: MessageFont; tilt?: boolean; finaleConfig?: Finale }
+export interface ParticleStyle { density: 'light' | 'balanced' | 'rich'; speed: number; preset: 'spring' | 'soft' | 'magnetic' | 'explosive'; interaction: 'repel' | 'attract' | 'none'; trails: boolean; ripples: boolean; wind: boolean; gravity: boolean }
+export const DEFAULT_PARTICLE_STYLE: ParticleStyle = { density: 'balanced', speed: 1, preset: 'spring', interaction: 'repel', trails: true, ripples: true, wind: false, gravity: false };
+function validateParticleStyle(value: unknown): ParticleStyle {
+  if (!record(value) || !['light','balanced','rich'].includes(String(value.density)) || !['spring','soft','magnetic','explosive'].includes(String(value.preset)) || !['repel','attract','none'].includes(String(value.interaction)) || !numberIn(value.speed,.5,2)) throw new Error('Die Partikeleinstellungen sind ungültig.');
+  for (const key of ['trails','ripples','wind','gravity']) if (typeof value[key] !== 'boolean') throw new Error('Die Partikeleffekte sind ungültig.');
+  return { density: value.density as ParticleStyle['density'], speed: value.speed as number, preset: value.preset as ParticleStyle['preset'], interaction: value.interaction as ParticleStyle['interaction'], trails: value.trails as boolean, ripples: value.ripples as boolean, wind: value.wind as boolean, gravity: value.gravity as boolean };
+}
+export interface MessageSettings { particles?: ParticleStyle; effect: TransitionEffect; finale: boolean; writing: WritingSettings; font?: MessageFont; tilt?: boolean; finaleConfig?: Finale }
 export interface Slide { text: string; duration: number; effect?: TransitionEffect; writing?: WritingSettings; font?: MessageFont; features?: SceneFeatures }
 export interface MessageContent { version: 1; slides: Slide[]; settings?: MessageSettings }
 export const WRITING_PRESETS = {
@@ -73,5 +80,5 @@ export function validateMessage(value: unknown): MessageContent {
   if (!record(s) || !isEffect(s.effect) || typeof s.finale !== 'boolean') throw new Error('Die Animationseinstellungen sind ungültig.');
   if (s.font !== undefined && !isFont(s.font)) throw new Error('Diese Schriftart ist ungültig.');
   if (s.tilt !== undefined && typeof s.tilt !== 'boolean') throw new Error('Die Neigungseinstellung ist ungültig.');
-  return { version: 1, slides, settings: { effect: s.effect, finale: s.finale, ...(s.tilt !== undefined ? { tilt: s.tilt } : {}), ...(s.finale && s.finaleConfig !== undefined ? { finaleConfig: validateFinale(s.finaleConfig) } : {}), writing: validateWriting(s.writing), ...(s.font !== undefined ? { font: s.font } : {}) } };
+  return { version: 1, slides, settings: { ...(s.particles !== undefined ? { particles: validateParticleStyle(s.particles) } : {}), effect: s.effect, finale: s.finale, ...(s.tilt !== undefined ? { tilt: s.tilt } : {}), ...(s.finale && s.finaleConfig !== undefined ? { finaleConfig: validateFinale(s.finaleConfig) } : {}), writing: validateWriting(s.writing), ...(s.font !== undefined ? { font: s.font } : {}) } };
 }
