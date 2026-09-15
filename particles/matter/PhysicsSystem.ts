@@ -20,12 +20,12 @@ export function stepPhysics(p: ParticlePool, interaction: InteractionSystem, now
     if (o.reduced && o.hold === null) progress = 1;
     let hx = p.tx[i], hy = p.ty[i], alpha = p.opacity[i];
     if (!owned) {
-      const ambient = i % 6 === 0 && o.atmosphere;
+      const ambient = i % 12 === 0 && o.atmosphere;
       // A slow tilted orbital field surrounds the hero; unassigned matter remains available.
-      const a = angle + clock * .035 * (random + .3), r = scale * (.43 + random * .16);
+      const a = angle + clock * .018 * (random + .3), r = scale * (.43 + random * .16);
       hx = cx + Math.cos(a) * r * 1.24; hy = cy + Math.sin(a) * r * .62 + Math.cos(a) * r * .22;
       if (!ambient) { hx = random * width; hy = ((angle / (Math.PI * 2)) * height + clock * (2 + random * 5)) % height; }
-      alpha = o.reduced ? 0 : ambient ? .2 + random * .3 : .028;
+      alpha = o.reduced ? 0 : ambient ? .07 + random * .10 : .012;
       p.state[i] = now - p.start[i] < 1000 ? p.state[i] : Behavior.FREE;
       p.z[i] = (random - .5) * 130;
     } else {
@@ -58,7 +58,7 @@ export function stepPhysics(p: ParticlePool, interaction: InteractionSystem, now
       const t = clamp((now - o.portalAt) / 1250), a = angle + t * 14, r = (1 - t) * scale * (.3 + random * .3);
       hx = cx + Math.cos(a) * r; hy = cy + Math.sin(a) * r; alpha = .7 + t * .3; p.state[i] = Behavior.PORTAL;
     }
-    const drift = !owned ? 3 : scene && o.floating ? 1.7 : o.style.preset === 'soft' ? .3 : 0;
+    const drift = !owned ? 1.4 : scene && o.floating ? 1.7 : o.style.preset === 'soft' ? .3 : 0;
     if (!o.reduced) { hx += Math.sin(clock + angle) * drift; hy += Math.cos(clock * .8 + angle) * drift; }
     p.alpha[i] += (alpha - p.alpha[i]) * Math.min(1, elapsed * .005);
     if (o.reduced) { p.x[i] = hx; p.y[i] = hy; p.vx[i] = p.vy[i] = 0; continue; }
@@ -82,7 +82,7 @@ export function stepPhysics(p: ParticlePool, interaction: InteractionSystem, now
       }
       if (o.style.ripples) for (const ripple of interaction.ripples) {
         const dx = p.x[i] - ripple.x, dy = p.y[i] - ripple.y, d = Math.hypot(dx, dy), age = (now - ripple.start) / 1000;
-        const wave = Math.exp(-(((d - age * 520) / 38) ** 2)) * Math.max(0, 1 - age / 1.5) * ripple.strength * 2100;
+        const wave = Math.exp(-(((d - age * 520) / 38) ** 2)) * Math.max(0, 1 - age / 1.5) * ripple.strength * (owned && !scene ? 480 : 2100);
         if (d > .1) { ax += dx / d * wave; ay += dy / d * wave; }
       }
       p.ax[i] = ax; p.ay[i] = ay;

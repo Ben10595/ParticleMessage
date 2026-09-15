@@ -15,6 +15,7 @@ export class ParticlePool {
   phase = new Float32Array(CAPACITY); random = new Float32Array(CAPACITY);
   color = new Float32Array(CAPACITY * 3);
   state = new Uint8Array(CAPACITY); effect = new Uint8Array(CAPACITY); part = new Uint8Array(CAPACITY);
+  uiElement = new Uint16Array(CAPACITY);
   owner = new Int32Array(CAPACITY); glyph = new Int32Array(CAPACITY);
   groups = new Map<number, number[]>();
   constructor(count: number, width: number, height: number) {
@@ -50,11 +51,20 @@ export class ParticlePool {
       this.tx[i] = t.x; this.ty[i] = t.y; this.tz[i] = t.z ?? 0;
       this.radius[i] = t.radius ?? 1; this.opacity[i] = t.alpha ?? .92;
       this.color.set(t.color ?? COLORS.ivory, i * 3);
-      this.glyph[i] = t.glyph ?? -1; this.part[i] = t.part ?? 0;
+      this.glyph[i] = t.glyph ?? -1; this.part[i] = t.part ?? 0; this.uiElement[i] = t.uiElement ?? 0;
       this.start[i] = now; this.delay[i] = t.delay ?? 0; this.duration[i] = duration;
       this.effect[i] = effectId(effect);
     });
     this.groups.set(group, slots); return slots;
+  }
+  /** Scroll translates the whole trajectory; IDs, velocities and reveal clocks stay intact. */
+  translate(slots: number[], dx: number, dy: number) {
+    if (!dx && !dy) return;
+    for (const i of slots) {
+      this.x[i] += dx; this.y[i] += dy;
+      this.tx[i] += dx; this.ty[i] += dy;
+      this.fx[i] += dx; this.fy[i] += dy;
+    }
   }
   countOwned() { let n = 0; for (const ids of this.groups.values()) n += ids.length; return n; }
   releaseSlot(i: number, now: number, strength = .6) {

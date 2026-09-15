@@ -1,6 +1,6 @@
 import type { TransitionEffect, MessageFont, WritingSettings } from '../../types/message';
 export interface Box { x: number; y: number; width: number; height: number }
-export interface Target { x: number; y: number; z?: number; radius?: number; alpha?: number; color?: [number, number, number]; glyph?: number; part?: number; delay?: number }
+export interface Target { x: number; y: number; z?: number; radius?: number; alpha?: number; color?: [number, number, number]; glyph?: number; part?: number; uiElement?: number; delay?: number }
 export interface GlyphBox extends Box { index: number; start: number; end: number }
 export interface Sample { targets: Target[]; glyphs: GlyphBox[]; fontSize: number; lineCount: number }
 export interface FormOptions { reserveSpace?: boolean; hold?: boolean; bounds?: () => DOMRect; writing?: WritingSettings; effect?: TransitionEffect; finale?: boolean; font?: MessageFont }

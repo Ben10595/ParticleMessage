@@ -26,6 +26,9 @@ export class ParticleEngine {
   private events = new AbortController();
   private motion = matchMedia('(prefers-reduced-motion: reduce)');
   private frame = 0; private refreshFrame = 0; private lastFrame = 0; private disposed = false; private lost = false;
+  private positionDirty = false;
+  private uiElements: { el: HTMLElement; rect: DOMRect; slots: number[] }[] = [];
+  private messageLayoutKey = '';
   private root: HTMLElement | null = null; private departing = false; private uiSignature = '';
   private message: Message | null = null; private shape: string | null = null;
   private hold: { progress: number; pressed: boolean } | null = null;
@@ -48,7 +51,7 @@ export class ParticleEngine {
     const signal = this.events.signal;
     window.addEventListener('resize', this.resize, { signal });
     window.visualViewport?.addEventListener('resize', this.resize, { signal });
-    window.addEventListener('scroll', this.refresh, { signal, passive: true, capture: true });
+    window.addEventListener('scroll', this.scroll, { signal, passive: true, capture: true });
     document.addEventListener('visibilitychange', this.visibility, { signal });
     this.motion.addEventListener('change', this.changeMotion, { signal });
     canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); this.lost = true; cancelAnimationFrame(this.frame); this.setHeld(false); canvas.dataset.renderer = 'recovering'; this.recoveryTimer = window.setTimeout(() => this.fail(), 3000); }, { signal });
@@ -77,12 +80,30 @@ export class ParticleEngine {
     cancelAnimationFrame(this.frame); this.setHeld(false); this.lastFrame = 0;
     if (!document.hidden && !this.disposed && !this.lost) this.frame = requestAnimationFrame(this.tick);
   };
+  private scroll = () => { this.positionDirty = true; };
+  /** All DOM reads are batched once per animation frame, never rastered on scroll. */
+  private syncPositions() {
+    this.positionDirty = false;
+    if (!this.departing) for (const entry of this.uiElements) {
+      if (!entry.el.isConnected) continue;
+      const next = entry.el.getBoundingClientRect();
+      this.pool.translate(entry.slots, next.x - entry.rect.x, next.y - entry.rect.y);
+      entry.rect = next;
+    }
+    const next = this.message?.options.bounds?.();
+    if (next && this.clip) {
+      const dx = next.x - this.clip.x, dy = next.y - this.clip.y;
+      this.pool.translate(this.pool.groups.get(SCENE) ?? [], dx, dy);
+      for (const glyph of this.message!.sample.glyphs) { glyph.x += dx; glyph.y += dy; }
+      this.clip = next;
+    }
+  }
   refresh = () => {
     cancelAnimationFrame(this.refreshFrame);
     this.refreshFrame = requestAnimationFrame(() => {
       if (this.disposed) return;
       if (this.root && !this.departing) this.captureUI();
-      if (this.message) { const secret = this.secret?.value; this.secret = null; this.layoutMessage(this.message, true); if (secret) this.revealSecret(secret); }
+      if (this.message) { const secret = this.secret?.value, revision = this.canvas.dataset.textRevision; this.layoutMessage(this.message, true); if (secret && revision !== this.canvas.dataset.textRevision) this.revealSecret(secret); }
       else if (this.shape) this.pool.form(SCENE, sampleShape(this.shape, this.width, this.height), this.time, this.reducedMotion ? 0 : 400, 'morph');
     });
   };
@@ -92,13 +113,18 @@ export class ParticleEngine {
     this.atmosphere = !!this.root.querySelector('.landing');
     const entries = [...this.root.querySelectorAll<HTMLElement>('[data-particle="hero"], [data-particle="button"], [data-particle="frame"], [data-particle="line"], [data-particle="control"]')]
       .filter(el => !el.closest('[aria-hidden="true"], [data-particle-overlay], .emoji-picker, .select-options') && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden')
+      .filter(el => {
+        const closed = el.closest('details:not([open])');
+        return !closed || !!closed.querySelector(':scope > summary')?.contains(el);
+      })
       .map(el => ({ el, rect: el.getBoundingClientRect(), style: getComputedStyle(el) }))
-      .filter(({rect}) => rect.bottom >= 0 && rect.top <= this.height && rect.width > 0 && rect.height > 0);
-    const signature = entries.map(({el,rect}) => `${el.dataset.particle}:${el.textContent}:${el.matches(':disabled')}:${Math.round(rect.x)}:${Math.round(rect.y)}:${Math.round(rect.width)}:${Math.round(rect.height)}`).join('|');
-    if (signature === this.uiSignature) return;
+      .filter(({rect}) => rect.width > 0 && rect.height > 0);
+    const signature = entries.map(({el,rect}) => `${el.dataset.particle}:${el.textContent}:${el.matches(':disabled')}:${Math.round(rect.width)}:${Math.round(rect.height)}`).join('|');
+    if (signature === this.uiSignature) { this.syncPositions(); return; }
     this.uiSignature = signature;
     const targets: Target[] = [];
-    for (const {el,rect,style} of entries) {
+    for (const [index, {el,rect,style}] of entries.entries()) {
+      const uiElement = index + 1;
       const kind = el.dataset.particle, hero = kind === 'hero';
       const primary = el.classList.contains('primary') && !!el.closest('.landing');
       const sceneButton = !!el.closest('.puzzle-answers');
@@ -107,21 +133,26 @@ export class ParticleEngine {
         const box = hero ? rect : { x: rect.x + 16, y: rect.y + 8, width: rect.width - 32, height: rect.height - 16 };
         const text = el.dataset.text ?? el.innerText;
         const sample = this.sampler.sample(text, box, parseFloat(style.fontSize), 'classic', style.textAlign, hero ? this.budget : 2000, style.fontFamily, '600');
-        targets.push(...sample.targets.map(t => ({ ...t, alpha: el.matches(':disabled') ? .22 : .96, color: el.classList.contains('hero-second') ? COLORS.gold : COLORS.ivory, delay })));
+        targets.push(...sample.targets.map(t => ({ ...t, alpha: el.matches(':disabled') ? .22 : .96, color: el.classList.contains('hero-second') ? COLORS.gold : COLORS.ivory, delay, uiElement })));
       }
       if (kind === 'button' || kind === 'frame' || kind === 'control' || kind === 'line') {
         const path = kind === 'line' ? [{ x: rect.x, y: rect.y }, { x: rect.right, y: rect.y }] : contour(rect.x,rect.y,rect.width,rect.height,parseFloat(style.borderRadius) || 3);
         const m = measure(path), count = Math.ceil(m.length / 4.5);
-        for (let n = 0; n <= count; n++) targets.push({ ...pointAt(path,m.lengths,n/Math.max(1,count)*m.length), radius: .65, alpha: el.matches(':disabled') ? .1 : primary ? .7 : .27, color: primary ? COLORS.gold : COLORS.ivory, delay });
+        for (let n = 0; n <= count; n++) targets.push({ ...pointAt(path,m.lengths,n/Math.max(1,count)*m.length), radius: .65, alpha: el.matches(':disabled') ? .1 : primary ? .7 : .27, color: primary ? COLORS.gold : COLORS.ivory, delay, uiElement });
       }
     }
     const uiBudget = Math.min(this.budget + 1500, Math.floor(this.pool.count * .57));
     const sampled = targets.length > uiBudget ? Array.from({ length:uiBudget },(_,i)=>targets[Math.floor(i*targets.length/uiBudget)]) : targets;
     this.pool.form(UI, sampled, this.time, this.reducedMotion ? 0 : 1050 / this.style.speed, 'morph');
+    const byElement = entries.map(({el,rect}) => ({el,rect,slots:[] as number[]}));
+    for (const i of this.pool.groups.get(UI) ?? []) byElement[this.pool.uiElement[i] - 1]?.slots.push(i);
+    this.uiElements = byElement;
+    this.canvas.dataset.uiRevision = String(Number(this.canvas.dataset.uiRevision ?? 0) + 1);
     this.canvas.dataset.uiTargetCount = String(targets.length);
   }
   departUI(root: HTMLElement) { this.root = root; this.departing = true; this.uiSignature = ''; this.pool.release(UI,this.time,.9); this.disperseText(.6); }
   formText(text: string, options: FormOptions | boolean = {}) {
+    this.messageLayoutKey = '';
     this.pool.release(SECRET,this.time,.2);
     this.shape = null; this.secret = null; this.giftAt = this.portalAt = this.releaseAt = null; this.floating = false;
     const opts = typeof options === 'boolean' ? {} : { ...options };
@@ -135,9 +166,13 @@ export class ParticleEngine {
     return completion;
   }
   private layoutMessage(message: Message, refresh = false) {
-    const rect = message.options.bounds?.(); this.clip = rect ?? null;
+    const rect = message.options.bounds?.();
     const box = rect ? { x: rect.x + 16, y: rect.y + 16, width: Math.max(20,rect.width - 32), height: Math.max(20,rect.height - 32) } : { x: this.width * .09, y: this.height * .17, width: this.width * .82, height: this.height * (message.options.reserveSpace ? .42 : .59) };
     const font = message.options.font ?? DEFAULT_FONT;
+    const layoutKey = [message.text,font,this.budget,box.width,box.height,message.options.reserveSpace].join('|');
+    if (refresh && layoutKey === this.messageLayoutKey) { this.syncPositions(); return; }
+    this.messageLayoutKey = layoutKey; this.clip = rect ?? null;
+    this.canvas.dataset.textRevision = String(Number(this.canvas.dataset.textRevision ?? 0) + 1);
     const sample = this.sampler.sample(message.text,box,Math.min(rect ? 54 : 106,box.width / (rect ? 6 : 7)),font,'center',this.budget);
     const effect = message.options.effect ?? 'morph';
     const targets = sample.targets.map(t => {
@@ -219,6 +254,7 @@ export class ParticleEngine {
     if (this.lastFrame && now - this.lastFrame < 15) { this.frame=requestAnimationFrame(this.tick); return; }
     const raw = this.lastFrame ? now-this.lastFrame : 16.67, elapsed=Math.min(50,raw);this.lastFrame=now;this.time+=elapsed;
     try {
+      if (this.positionDirty) this.syncPositions();
       if (this.hold) {
         const before=this.hold.progress;this.hold.progress=advanceHold(before,this.hold.pressed,elapsed,this.reducedMotion);
         if (before<1 && this.hold.progress>=1) this.shockwave(.45);
@@ -252,5 +288,5 @@ export class ParticleEngine {
     });
   }
   private fail(){this.onError?.();this.destroy();}
-  destroy(){if(this.disposed)return;this.disposed=true;clearTimeout(this.recoveryTimer);cancelAnimationFrame(this.frame);cancelAnimationFrame(this.refreshFrame);this.events.abort();this.interaction.destroy();this.renderer.destroy();for(const w of this.waiters)w.abort();this.root=null;this.message=null;}
+  destroy(){if(this.disposed)return;this.disposed=true;clearTimeout(this.recoveryTimer);cancelAnimationFrame(this.frame);cancelAnimationFrame(this.refreshFrame);this.events.abort();this.interaction.destroy();this.renderer.destroy();for(const w of this.waiters)w.abort();this.root=null;this.message=null;this.uiElements=[];}
 }

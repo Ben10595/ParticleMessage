@@ -9,6 +9,7 @@ import SceneControls from './SceneControls';
 import ParticleViewer from './ParticleViewer';
 import PasswordGate from './PasswordGate';
 import Branding from './Branding';
+import { useContentSelection } from './useContentSelection';
 import { useParticleSurface } from './useParticleSurface';
 import type { ParticleEngine } from '@/particles/matter/ParticleEngine';
 import { loadMessage, saveMessage, MessageExpiredError } from '@/lib/messages';
@@ -16,6 +17,7 @@ import { DEFAULT_SETTINGS, slideSettings, validateMessage, type Slide, type Mess
 type View = 'password' | 'home' | 'editor' | 'loading' | 'playing' | 'ended' | 'success' | 'error';
 const initialSlides: Slide[] = [{ text: '', duration: 2500 }];
 export default function ParticleExperience({ slug, authenticated = false }: { slug?: string; authenticated?: boolean }) {
+  useContentSelection();
   const [engine, setEngine] = useState<ParticleEngine | null>(null);
   const [fallback, setFallback] = useState(false);
   const [view, setView] = useState<View>(slug ? 'loading' : authenticated ? 'home' : 'password');
@@ -144,7 +146,7 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
       <p className="eyebrow"><span className="live-dot" /> EIN KLEINES UNIVERSUM. NUR FÜR EUCH.</p>
       <h1 className="home-title"><span data-particle="hero" data-particle-delay="150">Kleine Worte.</span><span data-particle="hero" data-particle-delay="400" className="hero-second">Großes Gefühl.</span></h1>
       <p className="landing-description">Manche Nachrichten verdienen mehr als eine Sprechblase.<br />{' '}Lass deine Worte zu einem Erlebnis werden.</p>
-      <div className="landing-actions"><button data-particle="button" className="primary" aria-label="Nachricht erstellen" onClick={() => void transition('editor')}>Nachricht erstellen ↗</button><button className="demo-button" onClick={() => void play([{ text: 'Hey, du.', duration: 1700, effect: 'dust' }, { text: 'Schön, dass es dich gibt.', duration: 2500, effect: 'magnet', features: { hold: true, gift: 'ribbon' } }], { ...DEFAULT_SETTINGS, finale: true, finaleConfig: { shape: 'heart', ending: 'float', duration: 2500 } })}>Einmal fühlen <span aria-hidden="true">▷</span></button></div>
+      <div className="landing-actions"><button data-particle="button" className="primary" aria-label="Nachricht erstellen" onClick={() => void transition('editor')}>Nachricht erstellen ✦</button><button className="demo-button" onClick={() => void play([{ text: 'Hey, du.', duration: 1700, effect: 'dust' }, { text: 'Schön, dass es dich gibt.', duration: 2500, effect: 'magnet', features: { hold: true, gift: 'ribbon' } }], { ...DEFAULT_SETTINGS, finale: true, finaleConfig: { shape: 'heart', ending: 'float', duration: 2500 } })}>Einmal fühlen <span aria-hidden="true">▷</span></button></div>
       <div className="landing-foot"><span>01 <b>Worte finden</b></span><span>02 <b>Magie hinzufügen</b></span><span>03 <b>Freude teilen</b></span></div>
       <span className="orbit-caption">BEWEGE DICH DURCH DIE PUNKTE</span>
     </section>}

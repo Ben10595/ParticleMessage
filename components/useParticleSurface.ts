@@ -33,12 +33,12 @@ export function useParticleSurface(engine: ParticleEngine | null, surface: RefOb
         lastHovered = null;
       }
     };
-    for (const event of ['input', 'change', 'focusin', 'focusout', 'pointerover', 'pointerout', 'pointerdown', 'pointerup', 'toggle']) root.addEventListener(event, update, true);
+    for (const event of ['input', 'change', 'toggle']) root.addEventListener(event, update, true);
     root.addEventListener('pointerover', onPointerOver as EventListener, true);
     root.addEventListener('pointerout', onPointerOut as EventListener, true);
     return () => {
       clearTimeout(timer); mutation.disconnect(); resize.disconnect();
-      for (const event of ['input', 'change', 'focusin', 'focusout', 'pointerover', 'pointerout', 'pointerdown', 'pointerup', 'toggle']) root.removeEventListener(event, update, true);
+      for (const event of ['input', 'change', 'toggle']) root.removeEventListener(event, update, true);
       root.removeEventListener('pointerover', onPointerOver as EventListener, true);
       root.removeEventListener('pointerout', onPointerOut as EventListener, true);
     };

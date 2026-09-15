@@ -134,7 +134,7 @@ test('missing, expired and offline messages have line error scenes', async ({ pa
   await page.route('**/rest/v1/messages*', route => route.fulfill({ status: 503, body: 'Unavailable' }));
   await page.reload(); await expect(page.getByRole('button', { name: 'Erneut versuchen' })).toBeVisible({ timeout: 20000 });
 });
-test('live preview uses writing, hold duration, and the same particle renderer', async ({ page }, testInfo) => {
+test('live preview uses writing and stays readable in the same particle renderer', async ({ page }, testInfo) => {
   await unlock(page);
   await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Hi. A❤️');
   await page.getByRole('switch', { name: 'Schreibanimation' }).check();
@@ -150,7 +150,8 @@ test('live preview uses writing, hold duration, and the same particle renderer',
   expect(Number(await page.locator('canvas').getAttribute('data-ui-target-count'))).toBeGreaterThan(100);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: `test-results/editor-${testInfo.project.name}.png` });
-  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'dispersing', { timeout: 8000 });
+  await page.waitForTimeout(3500);
+  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
 });
 test('missing canvas provides a functional readable fallback', async ({ page }) => {
   await page.addInitScript(() => { HTMLCanvasElement.prototype.getContext = () => null; });

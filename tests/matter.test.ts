@@ -55,3 +55,19 @@ test('sustained slow rendering reduces quality; isolated slow frames do not osci
  for(let i=0;i<140;i++)q.sample(40);assert.ok(q.level<1);
  const low=q.level;for(let i=0;i<50;i++)q.sample(16.67);assert.equal(q.level,low);
 });
+
+test('scroll translation preserves particle identity, velocity and reveal progress',()=>{
+ const p=new ParticlePool(20,800,600);
+ const ids=p.form(1,[{x:120,y:240,uiElement:1},{x:150,y:240,uiElement:2}],100,1200,'wave');
+ p.vx[ids[0]]=8; p.vy[ids[0]]=-3;
+ const snapshot=ids.map(i=>({x:p.x[i],y:p.y[i],tx:p.tx[i],ty:p.ty[i],fx:p.fx[i],fy:p.fy[i],start:p.start[i],duration:p.duration[i]}));
+ p.translate(ids,0,-320);
+ ids.forEach((i,n)=>{
+  assert.equal(p.x[i],snapshot[n].x); assert.ok(Math.abs(p.y[i]-(snapshot[n].y-320))<.001);
+  assert.equal(p.tx[i],snapshot[n].tx); assert.equal(p.ty[i],snapshot[n].ty-320);
+  assert.equal(p.start[i],snapshot[n].start); assert.equal(p.duration[i],snapshot[n].duration);
+ });
+ assert.equal(p.vx[ids[0]],8);assert.equal(p.vy[ids[0]],-3);
+ assert.deepEqual(p.groups.get(1),ids);assert.equal(p.uiElement[ids[0]],1);
+ p.translate(ids,0,320);assert.equal(p.ty[ids[0]],240);
+});

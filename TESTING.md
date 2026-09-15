@@ -1,3 +1,21 @@
+# Gezielte Verfeinerung der bestehenden Website – 15. September 2026
+
+Marke, Seitenstruktur, dunkle Gold-/Weiß-Gestaltung und die gemeinsame Engine bleiben erhalten. Verfeinert wurden Hero-Glow, Lesekontrast, Buttons und Abschnittsauswahl. Die rechte Desktop-Vorschau ist fest im Viewport verankert; mobil steht sie weiterhin oberhalb des Formulars. Nach einer Bearbeitung spielt der Reveal einmal und hält den Text, bis erneut abgespielt oder weitergeschrieben wird.
+
+Scrollereignisse markieren nur eine Positionsaktualisierung für den nächsten Frame. Vorhandene UI-Punkte verschieben Position, Quelle und Ziel gemeinsam; IDs, Geschwindigkeit und Reveal-Zeit bleiben erhalten. Unveränderte Textlayouts werden nicht erneut gesampelt. Eingeklappte Optionen erzeugen keine sichtbaren Partikelkonturen. Die Hintergrundbewegung und Hover-Wellen sind dezenter; Szenenwechsel verwenden Opacity und Transform statt einer flächigen Blur-Animation.
+
+Die normale Auswahl sowie Kopier-/Ausschneidebefehle für Seitentext sind gesperrt. Eingaben, Geheimwort-Markierungen und der explizite Link-Kopierknopf bleiben funktionsfähig. Das verhindert versehentliches Markieren, ist aber kein Schutz vor technischem Auslesen.
+
+- Production Build inklusive TypeScript, ESLint und `git diff --check`: erfolgreich.
+- **27 Unit-Tests bestanden**, einschließlich einer neuen Prüfung, dass Scrolltranslation IDs, Geschwindigkeiten und Animationszeit nicht verändert.
+- Vollständiger Browserlauf: **58 bestanden, 2 erwartete Desktop-Sensor-Skips**.
+- Abschließende gezielte Prüfungen: **10 bestanden**; Auswahl-/Kopiersperre, Texteingabe/Geheimnisse, Speichern aller Extras, unveränderte Partikelzuordnungen beim Scrollen, ortsfeste Desktop-Bühne und responsive Größen 360 × 740, 844 × 390 sowie 1024 × 768.
+- Manuelle Sichtprüfung der Startseite und der feststehenden Bühne beim Scrollen im In-App-Browser. Screenshot-Prüfung für Desktop, Telefon, Querformat und Tablet.
+
+Browserprüfungen verwenden Chrome/Chromium mit Desktop- und Touch-Emulation. Kein Deployment und in dieser Überarbeitung keine entfernten Datenbankänderungen. Die lokale Vorschau ist `http://localhost:3201/`.
+
+---
+
 # Neue gemeinsame Particle Engine – 13. September 2026
 
 Die frühere Linien-Engine und die beiden separaten Partikelimplementierungen sind durch `particles/matter/` ersetzt. Ein persistenter TypedArray-Pool versorgt UI, Nachricht, Geschenk, Geheimnisse und Finale; WebGL2 zeichnet instanzierte Quads. Die neue Oberfläche verwendet dunkle Flächen, warme Goldakzente und gerasterte Partikelschrift. Der Editor behält native, zugängliche Bedienelemente.

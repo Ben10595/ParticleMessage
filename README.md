@@ -77,7 +77,7 @@ Die Website wurde auf einen einzigen persistenten Partikelpool umgebaut. Startse
 
 ## Editor und Szenen
 
-Bis zu 15 Abschnitte mit je 150 Zeichen. Hinzufügen, Löschen und Verschieben erfolgen mit zugänglichen Schaltflächen. Die Live-Vorschau zeigt Änderungen nach kurzem Debouncing. „Vorschau“ spielt denselben `ScenePlayer` wie der öffentliche Link; Escape/× kehrt mit erhaltenem Entwurf zurück.
+Bis zu 15 Abschnitte mit je 150 Zeichen. Hinzufügen, Löschen und Verschieben erfolgen mit zugänglichen Schaltflächen. Die Live-Vorschau zeigt Änderungen nach 260 ms Debouncing und bleibt anschließend stehen. Auf Desktop ist die rechte Bühne fest im Viewport verankert; auf kleinen Displays steht sie oberhalb des Formulars. Der Wiederholen-Button spielt den Reveal erneut. Scrollen verschiebt vorhandene Partikel samt Zielpositionen, ohne Sampling oder Neuzuordnung. „Vorschau“ spielt denselben `ScenePlayer` wie der öffentliche Link; Escape/× kehrt mit erhaltenem Entwurf zurück.
 
 23 Reveal-Verfahren plus Zufallsauswahl: Formwechsel, Verstreut, Wirbel, Welle, Regen, Zusammenziehen, Einblenden, Aufsteigen, Aufblühen, Schreibmaschine, Explosion, Spirale, Magnet, Zoom, Von links nach rechts, Punkte einsammeln, Portal, Gravity Drop, Shockwave, Dust Assemble, Orbit Assemble, Random Chaos und Pixel Sweep. Jeder Abschnitt besitzt seinen eigenen Übergang, seine Schrift und optional Schreibrhythmus/Satzzeichenpausen. Die Lesedauer beginnt erst nach dem Formieren.
 
@@ -91,6 +91,8 @@ Die optionalen Interaktionen werden in der Reihenfolge **Rätsel → Geschenk �
 - **Geheime Worte:** Text im Eingabefeld markieren und „Auswahl geheim“ wählen. Bis zu vier Zusatztexte. Die zugehörigen Partikel ziehen nach vorne; übriger Text wird gedimmt. Rückkehr stellt die ursprünglichen Ziele derselben Punkte wieder her. Geheimnisse sind per Tastatur erreichbar. Textänderungen verschieben oder entfernen betroffene Markierungen korrekt.
 - **Neigung:** optionale Smartphone-Parallaxe, erst nach direkter Aktivierung. Kalibrierung und Orientierung werden berücksichtigt. Gelesener Text bewegt sich maximal 0,5 CSS-Pixel pro Achse; freie Punkte deutlich mehr. Ohne Sensor oder Freigabe ist die Experience vollständig bedienbar.
 - **Finale:** Materie zieht in ein Portal, verdichtet sich, hält kurz inne, explodiert mit Shockwave und formt Herz, Stern, Unendlichkeit oder eigenen Text. Endverhalten: Weiterschweben, Verblassen oder Explosion.
+
+Seitenbeschriftungen lassen sich weder markieren noch über normale Kopierbefehle kopieren. Eingabefelder bleiben für Bearbeitung und Geheimwort-Markierungen auswählbar; der Link-kopieren-Button funktioniert weiterhin. Das ist eine Bedienungsregel, kein Schutz vor Auslesen der öffentlichen Inhalte.
 
 Kleine Beschriftungen und Eingabefelder bleiben natives HTML für Lesbarkeit, Tastatur und Screenreader. Große Texte und Erlebnisformen sind Partikel. Rätsel/Geheimnisse sind Inszenierungen im öffentlichen JSON, keine Verschlüsselung.
 
