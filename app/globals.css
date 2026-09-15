@@ -48,7 +48,7 @@ details summary:after{content:none}
 .hero-second{color:var(--gold)}
 .landing-description{color:#bcbab0;font-size:15px;line-height:1.9;margin:0}
 .landing-actions{display:flex;gap:20px;align-items:center;margin-top:17px}
-.landing .primary{height:57px;padding:10px 30px;min-width:252px;border-radius:30px;font-size:15px;letter-spacing:.04em;font-weight:500;position:relative;isolation:isolate;background:linear-gradient(135deg,#c9ae7c10 0%,#d4be8c08 50%,#c9ae7c10 100%);border:1px solid #c9ae7c40;box-shadow:0 0 20px #c9ae7c15,0 1px 2px #0004;overflow:hidden;transition:background .3s,border-color .3s,box-shadow .3s,transform .2s}
+.landing .primary{height:57px;padding:10px 30px;min-width:252px;border-radius:30px;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:15px;letter-spacing:.02em;font-weight:400;position:relative;isolation:isolate;background:linear-gradient(135deg,#c9ae7c10 0%,#d4be8c08 50%,#c9ae7c10 100%);border:1px solid #c9ae7c40;box-shadow:0 0 20px #c9ae7c15,0 1px 2px #0004;overflow:hidden;transition:background .3s,border-color .3s,box-shadow .3s,transform .2s}
 .landing .primary:before{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:0 0 40px #c9ae7c30,0 0 80px #c9ae7c12,inset 0 0 30px #c9ae7c10;opacity:0;transition:opacity .35s;pointer-events:none}
 .landing .primary:after{content:'';position:absolute;top:0;left:-100%;width:60%;height:100%;background:linear-gradient(90deg,transparent,#c9ae7c18,transparent);transform:skewX(-20deg);pointer-events:none;transition:none}
 .landing .primary:is(:hover,:focus-visible){background:linear-gradient(135deg,#c9ae7c1a 0%,#d4be8c12 50%,#c9ae7c1a 100%);border-color:#c9ae7c60;box-shadow:0 0 30px #c9ae7c25,0 0 60px #c9ae7c10,0 2px 4px #0003;transform:translateY(-1px)}
