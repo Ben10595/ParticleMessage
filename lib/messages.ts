@@ -7,13 +7,25 @@ export function generateSlug() {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
   return Array.from(crypto.getRandomValues(new Uint8Array(12)), (byte) => alphabet[byte & 63]).join('');
 }
-export async function insertWithRetry(content: MessageContent, insert: (slug: string, content: MessageContent) => PromiseLike<{ error: { code?: string; message?: string } | null }>, randomSlug = generateSlug) {
+interface StorageError { code?: string; message?: string; status?: number }
+function storageErrorMessage(error: StorageError) {
+  const code = error.code ?? '';
+  const detail = `${error.message ?? ''} ${error.status ?? ''}`.toLowerCase();
+  if (code === '42501') return 'Supabase verweigert das Speichern. Prüfe die INSERT-Richtlinie (RLS) für public.messages.';
+  if (code === '42P01' || code === 'PGRST205') return 'Die Supabase-Tabelle public.messages fehlt oder ist für die API nicht verfügbar.';
+  if (error.status === 401 || error.status === 403) return 'Supabase lehnt die Verbindung ab. Prüfe, ob Project URL und Publishable Key aus demselben Projekt stammen.';
+  if (/fetch failed|failed to fetch|network|timeout|abort/.test(detail)) return 'Supabase ist nicht erreichbar. Prüfe die aktive NEXT_PUBLIC_SUPABASE_URL und deine Internetverbindung; starte danach den Entwicklungsserver neu.';
+  if (error.status && error.status >= 500) return 'Supabase meldet gerade einen Serverfehler. Bitte versuche es später erneut.';
+  return `Die Nachricht konnte nicht gespeichert werden. Prüfe Supabase${code ? ` (Fehler ${code})` : ''} und versuche es erneut.`;
+}
+
+export async function insertWithRetry(content: MessageContent, insert: (slug: string, content: MessageContent) => PromiseLike<{ error: StorageError | null }>, randomSlug = generateSlug) {
   const validated = validateMessage(content);
   for (let attempt = 0; attempt < 5; attempt++) {
     const slug = randomSlug();
     const { error } = await insert(slug, validated);
     if (!error) return slug;
-    if (error.code !== '23505') throw new Error('Die Nachricht konnte nicht gespeichert werden. Bitte prüfe die Verbindung und versuche es erneut.');
+    if (error.code !== '23505') throw new Error(storageErrorMessage(error));
   }
   throw new Error('Es konnte kein freier Link erzeugt werden. Bitte versuche es erneut.');
 }

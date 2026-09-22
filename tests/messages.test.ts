@@ -46,3 +46,8 @@ test('does not retry permission errors or insert invalid content', async () => {
   await assert.rejects(insertWithRetry({ version: 1, slides: [] }, async () => { attempts++; return { error: null }; }));
   assert.equal(attempts, 1);
 });
+test('explains network, RLS and missing-table save failures without exposing backend details', async () => {
+  await assert.rejects(insertWithRetry(valid, async () => ({ error: { message: 'TypeError: fetch failed' } })), /NEXT_PUBLIC_SUPABASE_URL/);
+  await assert.rejects(insertWithRetry(valid, async () => ({ error: { code: '42501' } })), /INSERT-Richtlinie/);
+  await assert.rejects(insertWithRetry(valid, async () => ({ error: { code: 'PGRST205' } })), /public\.messages/);
+});
