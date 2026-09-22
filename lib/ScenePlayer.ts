@@ -2,6 +2,7 @@ import type { ParticleEngine as OneLineEngine } from '../particles/matter/Partic
 import { DEFAULT_SETTINGS, slideSettings, type MessageSettings, type Slide } from '../types/message';
 import { DEFAULT_FINALE } from '../types/experience';
 import { advanceHold } from '../particles/reveal';
+import { MOTION_TIMING } from '../particles/matter/motion';
 export type StagePhase = 'puzzle' | 'gift' | 'opening' | 'hold' | 'forming' | 'reading' | 'secret' | 'finale';
 export interface PlaybackStage { phase: StagePhase; index: number; text: string; error?: string; secret?: number }
 type Wait = (ms: number, signal: AbortSignal) => Promise<void>;
@@ -78,7 +79,7 @@ export class ScenePlayer {
         if (features?.gift) {
           this.engine?.formShape('gift'); this.show('gift', 'Ein Geschenk für dich.'); await this.gate();
           this.show('opening', 'Dein Geschenk öffnet sich.'); this.engine?.openGift(features.gift);
-          await this.wait(this.engine?.reducedMotion ? 0 : 850, this.signal);
+          await this.wait(this.engine?.reducedMotion ? 0 : MOTION_TIMING.gift, this.signal);
           this.engine?.disperseText(features.gift === 'burst' ? 1.5 : .7);
           await this.wait(this.engine?.reducedMotion ? 0 : 450, this.signal);
         }
@@ -97,7 +98,7 @@ export class ScenePlayer {
       if (settings.finale) {
         const finale = settings.finaleConfig ?? DEFAULT_FINALE;
         this.show('finale', '');
-        this.engine?.portal(); await this.wait(this.engine?.reducedMotion ? 0 : 1250, this.signal);
+        this.engine?.portal(); await this.wait(this.engine?.reducedMotion ? 0 : MOTION_TIMING.portal, this.signal);
         await this.wait(this.engine?.reducedMotion ? 0 : 220, this.signal);
         this.engine?.shockwave(2); this.engine?.disperseText(2.6); await this.wait(this.engine?.reducedMotion ? 0 : 650, this.signal);
         const formation = finale.shape === 'text' ? this.engine?.formText(finale.text ?? 'Für dich.', { ...slideSettings(slides.at(-1)!, settings), writing: { ...settings.writing, enabled: false }, effect: 'spiral' }) : this.engine?.formShape(finale.shape);

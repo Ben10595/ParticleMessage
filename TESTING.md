@@ -1,3 +1,48 @@
+# Message-Core-Redesign – 22. September 2026
+
+Die Produktoberfläche wurde vollständig neu aufgebaut. Startseite, Passwortzugang, Composer, Versand, Teilen, Laden und Fehler verwenden jetzt eine dunkle Message-Core-Identität aus nativem HTML, SVG und CSS. Der Partikel-Canvas ist auf Live-Vorschau und Nachrichtenwiedergabe begrenzt; auf der Startseite erzeugt er keine UI-Ziele. Datenformat, Authentifizierung, Supabase-Zugriffe, Linkrouten und Szenenlogik blieben erhalten.
+
+- `npm run typecheck`, `npm run lint`, Production-Build und `git diff --check`: erfolgreich.
+- `npm test`: **35 Unit-Tests bestanden**.
+- Vollständige Browser-Suite: **60 bestanden, 2 erwartete Desktop-Sensor-Skips**. Geprüft wurden Desktop Chrome und iPhone-13-Emulation einschließlich Auth, Editor, Vorschau, Versand, Teilen, alte und neue öffentliche Links, sämtliche Animationen und Extras, Reduced Motion, fehlender Canvas, Canvas2D-Fallback, WebGL-Kontextwiederherstellung sowie 360×740, 844×390 und 1024×768.
+- Startseite, Passwortansicht, Desktop-Composer, Mobile-Composer und Live-Vorschau wurden zusätzlich im In-App-Browser visuell geprüft.
+- Kein Deployment, keine entfernte Datenbankänderung und keine echte Nachrichtenspeicherung. Supabase-Antworten und Sensorereignisse waren in der Browser-Suite simuliert.
+
+---
+
+# Flüssige Übergänge und präzise Zielpositionen – 19. September 2026
+
+Nach anschließender Nutzerkorrektur wurde das Grundtempo bewusst beruhigt: Oberfläche 1700 ms, Text 1900 ms, Formen 2200 ms, Geschenköffnung 1300 ms, Portal 1900 ms und Auflösen 1500 ms. Direkte Zielzuordnung und überlappende Seitenwechsel bleiben erhalten; es wurden keine zusätzlichen Stillstandsphasen eingeführt. Gemeinsame Konstanten synchronisieren Physik und Szenenwartezeiten. **34 Unit-Tests, 8 betroffene Desktop-/Mobile-Browserprüfungen, Build inklusive TypeScript und ESLint bestanden.**
+
+Die Zuordnung von Punkten zu neuen Textformen verwendet räumliche Teilbereiche statt alternierender Bildschirmzeilen. Auch beim Verkleinern einer Form werden Punkte gleichmäßig aus dem bisherigen Bestand übernommen. Die Bewegung entlang des Reveal-Pfades ist von der Federbewegung für Interaktionen getrennt: Punkte kommen termingerecht am Ziel an, während Mausimpulse und Restbewegung weiterhin weich ausklingen.
+
+Seitenwechsel starten ohne die bisherige 180-ms-Pause und übergeben nach 360 statt insgesamt 850 ms. Der Aufbau der neuen Oberfläche startet nach 30 statt bis zu 450 ms. Die Formierungszeit folgt den tatsächlich vorhandenen Punktverzögerungen; die zusätzliche pauschale Wartezeit wurde verkürzt. Die eingestellte Lesedauer und Schreibpausen bleiben erhalten.
+
+Die vorherige Übergangsverfeinerung ist ebenfalls enthalten: zusammenhängende Spiral- und Staubbahnen, sanftes Auflösen der Schrift sowie ein dezenter Goldton während der Bewegung. Bestehender Stil, feste Vorschau und Scrollstabilität bleiben erhalten.
+
+- Production Build inklusive TypeScript, ESLint und `git diff --check`: erfolgreich.
+- **34 Unit-Tests bestanden**. Neu: keine gekreuzte Zuordnung beim Verschieben über die frühere Zeilengrenze; alle Reveals erreichen ihre Zielpositionen ohne äußere Kräfte innerhalb der vorgesehenen Zeit bei 30/60/90/120/144 Hz. Außerdem zusammenhängende Spiralbewegung und Ausblenden ohne verbleibende Schriftreste.
+- **22 betroffene Browserprüfungen bestanden**, je elf auf Desktop und in iPhone-13-Emulation: alle Reveal-Arten, Schreibpausen, Live-Vorschau, Abbruch, Rätsel/Geschenk/Halten/Geheimtext/Finale, Reduced Motion, Canvas2D-Fallback, Startseite und Scrollstabilität. Supabase-Antworten simuliert; keine erneute entfernte Speicherung und kein Deployment.
+- Sichtprüfung der aktualisierten Startseite, des kürzeren Seitenwechsels und der festen Live-Bühne mit Textwechsel und Spirale im In-App-Browser.
+
+---
+
+# Animationsverfeinerung – 18. September 2026
+
+Die bestehende Engine folgt jetzt jedem Display-Frame statt schnelle Displays mit einem festen 15-ms-Cutoff auszubremsen. Transparenz, Tiefe, Neigung und Cursorimpulse verwenden zeitbasierte exponentielle Dämpfung. Die Federberechnung nutzt präzise Substeps und berechnet gemeinsame Dämpfungsfaktoren einmal pro Frame.
+
+Reveal-Pfade starten und enden ohne abrupten Beschleunigungswechsel. Eine zusammenhängende räumliche Staffelung ersetzt das kleinteilige versetzte Einsetzen der Textpunkte. Geschenkdeckel und Pixel-Reveal laufen weich an; das Abschlussportal zieht die vorhandene Geometrie zusammen, ohne die Punkte zuerst auf einem zufälligen Ring neu anzuordnen. Cursorbewegungen werden geglättet und hinterlassen beim Wechsel in ein Eingabefeld keine aktive Abstoßung. Der Lichtreflex des Hauptbuttons animiert `transform` statt `left`.
+
+- Production Build inklusive TypeScript, ESLint und `git diff --check`: erfolgreich.
+- **30 Unit-Tests bestanden**: alle Reveals konvergieren bei 30/60/90/120/144 Hz; neue Prüfungen für ruhende Pfadenden, bildratenunabhängige Dämpfung bei gleichmäßigen und schwankenden Framezeiten sowie sprungfreien Portaleintritt.
+- Vollständige Browser-Suite: **60 bestanden, 2 erwartete Desktop-Sensor-Skips**. Chrome Desktop und Chromium mit iPhone-13-Emulation; einschließlich aller Übergänge, Geschenk/Halten/Geheimnissen/Finale, Sensoren, Reduced Motion, Canvas-Fallback, Kontextwiederherstellung, fester Vorschau, Scrollstabilität und responsiver Größen. Supabase-Antworten und Sensoren werden in diesen Tests simuliert.
+- Sichtprüfung im In-App-Browser: Startseite, Editor mit Live-Reveal, lesbare ruhende Schrift, Geschenk und Öffnen, Halte-Bühne sowie Abbruch mit erhaltenem Entwurf. Mobile Lesbarkeit anhand der Browser-Testaufnahme geprüft.
+- Lokale Diagnose im In-App-Browser: 144 FPS bei ruhender Editor-Vorschau. Einzelne lokale Stichprobe, keine Zusicherung für andere Geräte. Physische Mobilgeräte wurden nicht vermessen.
+
+Keine zusätzlichen Bibliotheken, keine entfernten Datenbankänderungen und kein Deployment. Bestehender Stil, feste Desktop-Vorschau und Auswahlregeln bleiben erhalten.
+
+---
+
 # Gezielte Verfeinerung der bestehenden Website – 15. September 2026
 
 Marke, Seitenstruktur, dunkle Gold-/Weiß-Gestaltung und die gemeinsame Engine bleiben erhalten. Verfeinert wurden Hero-Glow, Lesekontrast, Buttons und Abschnittsauswahl. Die rechte Desktop-Vorschau ist fest im Viewport verankert; mobil steht sie weiterhin oberhalb des Formulars. Nach einer Bearbeitung spielt der Reveal einmal und hält den Text, bis erneut abgespielt oder weitergeschrieben wird.

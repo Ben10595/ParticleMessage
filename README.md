@@ -15,7 +15,7 @@ Anschließend http://localhost:3000 öffnen. Die Startseite führt zum Editor. E
 
 ## Umgebungsvariablen
 
-Die angeforderte `.env.local` ist bereits eingerichtet und von Git ausgeschlossen. Das angeforderte Passwort wird ausschließlich serverseitig in `.env.local` gesetzt. Für andere Installationen `.env.example` nach `.env.local` kopieren:
+`.env.local` enthält lokale Zugangsdaten und gehört nie ins Git-Repository. Für eine neue lokale Installation `.env.example` nach `.env.local` kopieren und die Beispielwerte ersetzen:
 
 ```dotenv
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
@@ -51,7 +51,7 @@ RLS muss aktiviert bleiben. Die vorhandenen Policies müssen der Rolle `anon` SE
 }
 ```
 
-`Link erstellen` validiert die Daten, erzeugt mit `crypto.getRandomValues` einen zwölfstelligen URL-sicheren Slug (72 Bit Zufall) und speichert `{ content, slug }`. Bei PostgreSQL-Fehler `23505` werden maximal fünf Slugs versucht. Die Routen `/m/[slug]` und `/p/[slug]` fragen `content` und `created_at` für den exakt passenden Slug ab. Daten aus der Datenbank werden erneut validiert. Abfragen haben ein 15-Sekunden-Zeitlimit.
+`Nachricht senden` validiert die Daten, erzeugt mit `crypto.getRandomValues` einen zwölfstelligen URL-sicheren Slug (72 Bit Zufall) und speichert `{ content, slug }`. Bei PostgreSQL-Fehler `23505` werden maximal fünf Slugs versucht. Die Routen `/m/[slug]` und `/p/[slug]` fragen `content` und `created_at` für den exakt passenden Slug ab. Daten aus der Datenbank werden erneut validiert. Abfragen haben ein 15-Sekunden-Zeitlimit.
 
 Die vorhandenen öffentlichen SELECT/INSERT-Policies sind **keine Zugriffskontrolle anhand des Links**: Nachrichten sind öffentlich lesbar und werden nicht verschlüsselt. Zufallsslugs erschweren das Erraten einzelner URLs. Ein Link läuft nach 72 Stunden ab; erneutes Speichern erzeugt einen neuen Link. Entwürfe bleiben während der geöffneten Sitzung im Speicher und werden erst beim Erstellen des Links gespeichert. Missbrauchsschutz und verbindliche serverseitige Größenlimits sollten für einen öffentlichen Betrieb zusätzlich in Supabase eingerichtet werden; Clientvalidierung allein kann direkte API-Aufrufe nicht begrenzen.
 
@@ -63,15 +63,21 @@ Keine neuen Environment Variables, Service-Role-Keys, Vercel-Cron-Endpunkte oder
 
 Grundlage: [Supabase Cron](https://supabase.com/docs/guides/cron/quickstart) und [restriktive RLS-Policies](https://supabase.com/docs/guides/database/postgres/row-level-security).
 
-## Eine gemeinsame Partikelwelt
+## Message Core und Nachrichtenwelt
 
-Die Website wurde auf einen einzigen persistenten Partikelpool umgebaut. Startseite, Schaltflächen, Nachrichten, Geschenk und Finale verwenden denselben Renderer und dieselbe Simulation. Die beiden früheren Engines sowie unbenutzte Strichschrift-/Canvas-Subsysteme wurden entfernt.
+Die Produktoberfläche bietet fünf eigenständige Designwelten: Particle, Message Core, Liquid Flow, Console Flow und Minimal Focus. Ein sichtbarer Umschalter bewahrt Composer, Navigation, Live-Vorschau und Wiedergabe. Pro Modus lassen sich Bewegung, Glow und Übergänge abstimmen; Favorit, Auto-Wechsel, Startmodus, Hintergrundeffekte, Partikel und Fokusmodus werden lokal im Browser gespeichert. „Draft Resonance“ reagiert auf die Länge des Entwurfs. Systemeinstellungen und die manuelle Option für reduzierte Bewegung werden berücksichtigt.
 
-- Dunkle, großzügige Oberfläche mit cremefarbenen und dezent goldenen Partikeln, weichen Kernen, kleinen Halos und einem interaktiven orbitalen Feld.
+Der SVG-/CSS-Message-Core reagiert auf Zeigerbewegung, Eingabe und den echten Speicherstatus. Der Partikelrenderer bleibt für Live-Vorschau und Nachrichtenwiedergabe verfügbar. Bei ausgeschalteter Partikelvorschau bleibt der Entwurf als Text lesbar; öffentliche geteilte Nachrichten werden durch lokale Anzeigeeinstellungen nicht verändert.
+
+- Dunkle Anthrazit-/Schwarz-Oberfläche mit kühlem Blau, Cyan und dezentem Violett, ruhigem Linienraster und großzügigem Freiraum.
+- Der persistente Message Core wechselt zwischen Ruhe, Eingabe, Aufladen, Versand, Erfolg, Sperre und Fehler. Der API-Aufruf startet sofort; es gibt keine künstliche Versandwartezeit.
 - Texte entstehen durch echte Glyphraster auf einem unsichtbaren Canvas. Größe, Umbruch, Punktabstand und Dichte passen sich an den verfügbaren Platz an. UTF-16-Graphemgrenzen bleiben für Geheimnisse erhalten.
 - Vier Browser-Schriftfamilien: Klar (neuer Standard), Handschrift, Editorial und Mono. Der Editor zeigt dieselben Font-Stacks wie der Sampler. Explizit gespeicherte Schriftwahlen bleiben erhalten.
 - Ein fester Pool mit bis zu 18.000 Slots auf Desktop, 11.000 auf schmalen WebGL-Ansichten und 7.000 im Canvas-Fallback. Tatsächlich gezeichnet werden nur sichtbare Punkte. IDs, Positionen und Geschwindigkeiten bleiben beim Formenwechsel erhalten.
 - Federphysik mit Sekunden-Zeitbasis und Substeps bis 1/120 s. Maus-/Mehrfinger-Abstoßung oder Anziehung, geschwindigkeitsabhängiger Wind, Shockwaves, schwebende Ruhebewegung, Schwerkraft und Bewegungsspuren sind kombinierbar.
+- Die Animation folgt der Bildwiederholrate des Displays. Zeitbasierte Dämpfung hält Transparenz, Tiefe, Neigung und Cursorimpulse bei unterschiedlichen Bildraten konsistent. Reveal-Pfade starten und enden mit weicher Beschleunigung; das Portal zieht die vorhandene Geometrie ohne anfänglichen Positionssprung zusammen.
+- Räumliche Zielzuordnung verhindert das bisherige Kreuzen an Zeilengrenzen. Die Punkte folgen ihrer Bahn direkt; Federkräfte legen nur Interaktion und Restimpuls darüber. Textübergänge berechnen ihr Ende aus den tatsächlichen Punktverzögerungen.
+- Ruhiges Grundtempo bei 1×: Text 1,9 s, Formen 2,2 s, Geschenköffnung 1,3 s und Portal 1,9 s. Auflösen dauert 1,5 s. Gemeinsame Zeitkonstanten halten Bewegung und Szenenablauf synchron; der vorhandene Geschwindigkeitsregler bleibt verfügbar.
 - WebGL2 zeichnet instanzierte Quads in einem Draw Call. Die Shader erzeugen einen weichen Punktkern und geschwindigkeitsabhängige Spuren. Der gebündelte Canvas2D-Fallback verwendet dieselbe Simulation.
 - Automatische Qualitätsanpassung mit Hysterese, DPR-Begrenzung, pausierter Animation in unsichtbaren Tabs und WebGL-Context-Recovery. Bei fehlendem Canvas bleibt eine funktionale HTML-Darstellung verfügbar.
 
@@ -81,7 +87,7 @@ Bis zu 15 Abschnitte mit je 150 Zeichen. Hinzufügen, Löschen und Verschieben e
 
 23 Reveal-Verfahren plus Zufallsauswahl: Formwechsel, Verstreut, Wirbel, Welle, Regen, Zusammenziehen, Einblenden, Aufsteigen, Aufblühen, Schreibmaschine, Explosion, Spirale, Magnet, Zoom, Von links nach rechts, Punkte einsammeln, Portal, Gravity Drop, Shockwave, Dust Assemble, Orbit Assemble, Random Chaos und Pixel Sweep. Jeder Abschnitt besitzt seinen eigenen Übergang, seine Schrift und optional Schreibrhythmus/Satzzeichenpausen. Die Lesedauer beginnt erst nach dem Formieren.
 
-Unter „Die Partikelwelt“ stehen Dichte, Animationsgeschwindigkeit (0,5–2×), Feder/Soft Float/Magnetic/Explosive, Berührungsmodus und kombinierbare Bewegungs-/Wind-/Gravitationseffekte bereit. Diese Einstellungen werden mitgespeichert.
+Unter „Bewegung & Atmosphäre“ stehen Dichte, Animationsgeschwindigkeit (0,5–2×), Feder/Soft Float/Magnetic/Explosive, Berührungsmodus und kombinierbare Bewegungs-/Wind-/Gravitationseffekte bereit. Diese Einstellungen werden mitgespeichert.
 
 Die optionalen Interaktionen werden in der Reihenfolge **Rätsel → Geschenk → Hold/Reveal → Nachricht/Geheimnisse → nächste Szene → Finale** abgespielt:
 
@@ -94,7 +100,7 @@ Die optionalen Interaktionen werden in der Reihenfolge **Rätsel → Geschenk �
 
 Seitenbeschriftungen lassen sich weder markieren noch über normale Kopierbefehle kopieren. Eingabefelder bleiben für Bearbeitung und Geheimwort-Markierungen auswählbar; der Link-kopieren-Button funktioniert weiterhin. Das ist eine Bedienungsregel, kein Schutz vor Auslesen der öffentlichen Inhalte.
 
-Kleine Beschriftungen und Eingabefelder bleiben natives HTML für Lesbarkeit, Tastatur und Screenreader. Große Texte und Erlebnisformen sind Partikel. Rätsel/Geheimnisse sind Inszenierungen im öffentlichen JSON, keine Verschlüsselung.
+Die gesamte Produktoberfläche bleibt natives HTML und SVG für Lesbarkeit, Tastatur und Screenreader. Nur Vorschau, öffentliche Nachricht und Erlebnisformen verwenden den Partikel-Canvas. Rätsel/Geheimnisse sind Inszenierungen im öffentlichen JSON, keine Verschlüsselung.
 
 ## Architektur und Speicherformat
 
@@ -153,11 +159,26 @@ Der optionale `scripts/check-storage.ts`-Integrationstest erzeugt **einen echten
 
 Aktuelle Prüfergebnisse und Grenzen stehen in [TESTING.md](TESTING.md). Physische iOS-/Android-Geräte und reale Low-End-GPUs müssen separat gemessen werden; Browser-Emulation allein garantiert keine 60 FPS auf jeder Hardware.
 
+## Quellcode nach GitHub hochladen
+
+Im Projektordner zuerst `git status` prüfen, damit nur die gewünschten Änderungen hochgeladen werden. Danach:
+
+```sh
+git add -A
+git status
+git commit -m "Prepare ParticleMessage for deployment"
+git push -u origin main
+```
+
+`git add -A` nimmt sämtliche aktuell geänderten und neuen Projektdateien auf. `.env.local` ist durch `.gitignore` ausgeschlossen; `.env.example` enthält nur Platzhalter und darf mit hochgeladen werden. Vor dem Commit trotzdem `git status` kontrollieren und niemals echte Passwörter, Session-Secrets oder Supabase-Secret-/Service-Role-Keys committen. Dieses Repository ist mit dem Remote `origin` verbunden.
+
+GitHub speichert hier den Quellcode, stellt die Next.js-App aber nicht selbst als Website bereit. Lokale Nachrichtenlinks mit `localhost` sind nur auf deinem Computer erreichbar. Für Links, die andere Personen öffnen können, muss die App zusätzlich auf einem Next.js-Host veröffentlicht werden.
+
 ## Deployment auf Vercel
 
-1. Dieses Projekt in ein eigenes Git-Repository übernehmen und bei Vercel importieren; Framework Next.js auswählen.
-2. Beide `NEXT_PUBLIC_SUPABASE_*`-Variablen unter Project Settings → Environment Variables für die benötigten Umgebungen setzen.
-3. Mit dem normalen Build-Befehl `npm run build` bereitstellen.
-4. Die bereitgestellte HTTPS-Domain öffnen und dort einen Link erzeugen. Die App verwendet automatisch die aktuelle Domain.
+1. Das GitHub-Repository bei Vercel importieren; Framework Next.js auswählen.
+2. Unter Project Settings → Environment Variables für die benötigten Umgebungen alle vier Variablen aus `.env.example` setzen: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `PARTICLE_MESSAGE_PASSWORD` und `PARTICLE_MESSAGE_SESSION_SECRET`. Das Session-Secret muss ein eigener langer zufälliger Wert sein.
+3. Mit dem normalen Build-Befehl `npm run build` bereitstellen. Vorher sicherstellen, dass Supabase-Tabelle und SELECT-/INSERT-Policies vorhanden sind. Die Ablaufmigration oben ist für Ablauf-Sperre und automatische Bereinigung vorgesehen.
+4. Nach dem Deployment die HTTPS-Domain öffnen, mit dem eingerichteten Passwort anmelden, eine Testnachricht erstellen und den erzeugten Link öffnen. Die App baut Links aus der aktuellen Domain und verwendet neue `/m/<slug>`-Links; alte `/p/<slug>`-Links bleiben erreichbar.
 
-Lokale Links mit `localhost` sind nur auf dem jeweiligen Computer erreichbar. Für andere Personen die App bereitstellen und die öffentliche Domain nutzen; bereits gespeicherte Slugs lassen sich auch unter der neuen Domain mit `/p/<slug>` öffnen. Es werden keine Supabase-Secrets und keine zusätzlichen Backend-Endpunkte benötigt.
+Die öffentlichen Nachrichtenlinks sind absichtlich ohne Passwort lesbar. Veröffentliche daher keine vertraulichen Inhalte; Links sind nicht verschlüsselt. Es werden keine Supabase-Secret-Keys und keine zusätzlichen Backend-Endpunkte benötigt.

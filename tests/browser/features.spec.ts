@@ -23,7 +23,7 @@ test('puzzle, gift, reversible hold, localized secret, finale and replay share o
   await expect(held).toBeVisible();
   const box = (await held.boundingBox())!; await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down();
   await expect.poll(async () => Number(await canvas.getAttribute('data-hold-progress'))).toBeGreaterThan(.25);
-  await page.mouse.up(); const partial = Number(await canvas.getAttribute('data-hold-progress'));
+  const partial = Number(await canvas.getAttribute('data-hold-progress')); await page.mouse.up();
   await expect.poll(async () => Number(await canvas.getAttribute('data-hold-progress'))).toBeLessThan(partial - .08);
   await held.focus(); await page.keyboard.down('Space');
   await expect(page.locator('[data-stage="reading"]')).toBeAttached(); await page.keyboard.up('Space');
@@ -72,7 +72,7 @@ test('editor saves all optional settings, selections survive edits and preview c
   await expect(input).toHaveValue('Hallo Welt.');
   let saved: MessageContent | undefined;
   await page.route('**/rest/v1/messages*', route => { saved = route.request().postDataJSON().content; return route.fulfill({ status: 201, body: '' }); });
-  await page.getByRole('button', { name: 'Link erstellen', exact: true }).click();
+  await page.getByRole('button', { name: 'Nachricht senden', exact: true }).click();
   await expect(page.getByLabel('Link zu deiner Nachricht')).toBeVisible();
   expect(saved?.slides[0].features).toMatchObject({ hold: true, gift: 'burst', puzzle: { kind: 'code', code: '007' }, secrets: [{ start: 0, end: 5, text: 'Eine Überraschung.' }] });
   expect(saved?.settings).toMatchObject({ tilt: true, finale: true, finaleConfig: { shape: 'text', text: 'Für immer.' } });

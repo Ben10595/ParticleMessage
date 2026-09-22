@@ -50,7 +50,7 @@ test('font and animation choices preview, follow their section and survive the s
       await route.fulfill({ status: 201, body: '' });
     } else await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ content: saved, created_at: new Date().toISOString() }) });
   });
-  await page.getByRole('button', { name: 'Link erstellen', exact: true }).click();
+  await page.getByRole('button', { name: 'Nachricht senden', exact: true }).click();
   const link = page.getByRole('textbox', { name: 'Link zu deiner Nachricht' });
   await expect(link).toBeVisible();
   expect(saved?.slides).toMatchObject([{ font: 'mono', effect: 'typewriter' }, { font: 'editorial', effect: 'bloom' }]);
@@ -73,7 +73,7 @@ test('password rejection, signed httpOnly session, reload, and shared canvas acr
   await expect(page.getByRole('main').getByRole('alert')).toHaveText('Falsches Passwort.');
   await page.getByLabel('Passwort', { exact: true }).fill('particle-test');
   await page.getByRole('button', { name: 'Öffnen', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Kleine Worte. Großes Gefühl.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Was möchtest du sagen?' })).toBeVisible();
   expect(await canvas?.evaluate(el => el === document.querySelector('canvas'))).toBe(true);
   const cookie = (await context.cookies()).find(c => c.name === 'particle_message_access');
   expect(cookie?.httpOnly).toBe(true); expect(cookie?.sameSite).toBe('Strict'); expect(cookie?.secure).toBe(true);
@@ -108,8 +108,8 @@ test('per-slide writing, emoji insertion at cursor, ordering, preview, save and 
   await expect(input).toBeVisible();
   let saved: Record<string, unknown> | undefined;
   await page.route('**/rest/v1/messages*', async route => { saved = route.request().postDataJSON(); await route.fulfill({ status: 201, body: '' }); });
-  await page.getByRole('button', { name: 'Link erstellen', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Deine Nachricht ist bereit.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Nachricht senden', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Deine Nachricht ist unterwegs.' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Link zu deiner Nachricht' })).toHaveValue(/\/m\/[A-Za-z0-9_-]{12}$/);
   expect(saved?.content).toMatchObject({ slides: [{ text: 'Du bist wunderbar. ✨' }, { effect: 'wave', writing: { enabled: true, speed: 115, questionPause: 1000 } }] });
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -134,7 +134,7 @@ test('missing, expired and offline messages have line error scenes', async ({ pa
   await page.route('**/rest/v1/messages*', route => route.fulfill({ status: 503, body: 'Unavailable' }));
   await page.reload(); await expect(page.getByRole('button', { name: 'Erneut versuchen' })).toBeVisible({ timeout: 20000 });
 });
-test('live preview uses writing and stays readable in the same particle renderer', async ({ page }, testInfo) => {
+test('live preview uses writing without turning the interface into particles', async ({ page }, testInfo) => {
   await unlock(page);
   await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Hi. A❤️');
   await page.getByRole('switch', { name: 'Schreibanimation' }).check();
@@ -147,7 +147,7 @@ test('live preview uses writing and stays readable in the same particle renderer
   expect(await page.locator('canvas').count()).toBe(1);
   await expect(page.locator('canvas')).toHaveAttribute('data-renderer', 'webgl2');
   expect(Number(await page.locator('canvas').getAttribute('data-line-point-count'))).toBeLessThan(12000);
-  expect(Number(await page.locator('canvas').getAttribute('data-ui-target-count'))).toBeGreaterThan(100);
+  expect(Number(await page.locator('canvas').getAttribute('data-ui-target-count'))).toBe(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: `test-results/editor-${testInfo.project.name}.png` });
   await page.waitForTimeout(3500);
@@ -193,7 +193,7 @@ test('all transitions play and finish without canvas resets', async ({ page }) =
 });
 test('limits, deletion, validation, and save errors retain the draft', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' }); await unlock(page);
-  await page.getByRole('button', { name: 'Link erstellen', exact: true }).click();
+  await page.getByRole('button', { name: 'Nachricht senden', exact: true }).click();
   await expect(page.getByRole('main').getByRole('alert')).toHaveText('Abschnitt 1 ist noch leer.');
   const input = page.getByRole('textbox', { name: 'ABSCHNITT 01' });
   await input.fill('A'.repeat(151)); await expect(input).toHaveValue('A'.repeat(150));
@@ -201,7 +201,7 @@ test('limits, deletion, validation, and save errors retain the draft', async ({ 
   await expect(page.getByRole('button', { name: 'Abschnitt hinzufügen', exact: true })).toBeDisabled();
   for (let i = 1; i < 15; i++) await page.getByRole('button', { name: 'Abschnitt löschen', exact: true }).click();
   await page.route('**/rest/v1/messages*', route => route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ code: '42501' }) }));
-  await page.getByRole('button', { name: 'Link erstellen', exact: true }).click();
+  await page.getByRole('button', { name: 'Nachricht senden', exact: true }).click();
   await expect(page.getByRole('main').getByRole('alert')).toContainText('nicht gespeichert'); await expect(input).toHaveValue('A'.repeat(150));
 });
 

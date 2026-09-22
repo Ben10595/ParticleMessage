@@ -3,11 +3,11 @@ async function home(page: Page) {
   await page.goto('/');
   await page.getByLabel('Passwort', { exact: true }).fill('particle-test');
   await page.getByRole('button', { name: 'Öffnen', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Kleine Worte. Großes Gefühl.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Was möchtest du sagen?' })).toBeVisible();
 }
 test('page text cannot be selected or copied, while editing and secret selections work', async ({ page }) => {
   await home(page);
-  const heading = page.getByRole('heading', { name: 'Kleine Worte. Großes Gefühl.' });
+  const heading = page.getByRole('heading', { name: 'Was möchtest du sagen?' });
   expect(await heading.evaluate(el => getComputedStyle(el).userSelect)).toBe('none');
   const box = (await heading.boundingBox())!;
   await page.mouse.move(box.x + 3, box.y + box.height / 3); await page.mouse.down();
@@ -26,7 +26,7 @@ test('page text cannot be selected or copied, while editing and secret selection
 test('scroll preserves particle assignments and the desktop stage stays fixed', async ({ page }, info) => {
   await home(page); await page.getByRole('button', { name: 'Nachricht erstellen', exact: true }).click();
   await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Deine Worte bleiben.');
-  for (const title of ['Die Partikelwelt', 'Diesen Abschnitt besonders machen', 'Für die ganze Nachricht']) {
+  for (const title of ['Bewegung & Atmosphäre', 'Diesen Abschnitt besonders machen', 'Für die ganze Nachricht']) {
     await page.locator('summary').filter({ hasText: title }).click();
   }
   await page.evaluate(() => window.scrollTo(0, 0));

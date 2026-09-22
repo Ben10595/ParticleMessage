@@ -8,6 +8,44 @@ import type { InteractionSystem } from '../particles/matter/InteractionSystem';
 import { QualityManager } from '../particles/matter/QualityManager';
 const interaction = { pointers:new Map(), ripples:[] } as unknown as InteractionSystem;
 const options: PhysicsOptions = { reduced:false,hold:null,tiltX:0,tiltY:0,floating:false,giftAt:null,portalAt:null,atmosphere:false,style:DEFAULT_PARTICLE_STYLE };
+test('spatial matching avoids crossed paths when text moves across the old row boundary',()=>{
+ const p=new ParticlePool(2,800,600);
+ p.x[0]=100;p.x[1]=200;p.y[0]=p.y[1]=23;
+ const ids=p.form(2,[{x:100,y:25},{x:200,y:25}],0,1200,'morph');
+ assert.equal(new Set(ids).size,2);
+ for(const i of ids) assert.equal(Math.hypot(p.tx[i]-p.fx[i],p.ty[i]-p.fy[i]),2);
+});
+test('unperturbed particles reach their assigned glyphs by the reveal deadline at every refresh rate',()=>{
+ for(const effect of EFFECTS.filter(e=>e!=='random')) for(const hz of [30,60,90,120,144]) {
+  const p=new ParticlePool(16,800,600);
+  const ids=p.form(2,[{x:320,y:240},{x:450,y:380}],0,1200,effect);
+  run(p,hz,1300);
+  for(const i of ids)assert.ok(Math.hypot(p.x[i]-p.tx[i],p.y[i]-p.ty[i])<.05,`${effect}/${hz} arrives without trailing behind`);
+ }
+});
+test('nearby dots follow coherent spiral paths independent of the screen position',()=>{
+ const targets=[{x:300,y:250},{x:301,y:250},{x:500,y:350}];
+ const p=new ParticlePool(32,800,600), shifted=new ParticlePool(32,800,600);
+ const ids=p.form(2,targets,0,1100,'spiral');
+ const other=shifted.form(2,targets.map(t=>({x:t.x+80,y:t.y-60})),0,1100,'spiral');
+ ids.forEach(id=>{
+  const match=other.find(i=>shifted.tx[i]===p.tx[id]+80&&shifted.ty[i]===p.ty[id]-60)!;
+  assert.ok(Math.abs(p.flowX[id]-shifted.flowX[match])<.001);
+  assert.ok(Math.abs(p.flowY[id]-shifted.flowY[match])<.001);
+  p.x[id]=p.fx[id]=p.guideX[id]=p.tx[id]-100;p.y[id]=p.fy[id]=p.guideY[id]=p.ty[id]+30;
+ });
+ run(p,60,600);
+ const a=ids.find(i=>p.tx[i]===300)!,b=ids.find(i=>p.tx[i]===301)!;
+ assert.ok(Math.hypot(p.x[a]-p.x[b],p.y[a]-p.y[b])<3,'neighbours stay together during the swirl');
+});
+test('released lettering keeps a visible dissolve before returning to background matter',()=>{
+ const p=new ParticlePool(32,800,600),ids=p.form(2,[{x:400,y:300}],0,0,'morph');
+ run(p,60,3000);p.release(2,3000,.6);
+ for(let t=3016.67;t<=3300;t+=1000/60)stepPhysics(p,interaction,t,1000/60,800,600,options);
+ assert.ok(p.alpha[ids[0]]>.65,'letters do not disappear immediately');
+ for(let t=3316.67;t<=5200;t+=1000/60)stepPhysics(p,interaction,t,1000/60,800,600,options);
+ assert.ok(p.alpha[ids[0]]<.03,'dissolved letters do not leave ghosts');
+});
 function run(p:ParticlePool,hz:number,ms:number,opts=options,input=interaction) { for(let t=1000/hz;t<=ms+.1;t+=1000/hz) stepPhysics(p,input,t,1000/hz,800,600,opts); }
 test('one persistent pool transfers IDs from UI to scene, retires surplus and never duplicates ownership',()=>{
  const p=new ParticlePool(800,800,600), storage=p.x;
@@ -20,12 +58,24 @@ test('one persistent pool transfers IDs from UI to scene, retires surplus and ne
  const ids=[...p.groups.values()].flat();assert.equal(new Set(ids).size,ids.length);assert.equal(ids.length,800);
  p.form(2,targets.slice(0,40),2500,1000,'morph');assert.equal(p.groups.get(2)?.length,40);assert.equal(p.countOwned(),240);
 });
-test('spring integration stays finite and converges at 30, 60 and 120 Hz for every reveal',()=>{
- for(const effect of EFFECTS.filter(e=>e!=='random')) for(const hz of [30,60,120]) {
+test('spring integration stays finite and converges at 30, 60, 90, 120 and 144 Hz for every reveal',()=>{
+ for(const effect of EFFECTS.filter(e=>e!=='random')) for(const hz of [30,60,90,120,144]) {
   const p=new ParticlePool(32,800,600);p.form(2,[{x:400,y:300}],0,1100,effect);run(p,hz,4500);
   const id=p.groups.get(2)![0];assert.ok(Number.isFinite(p.x[id]),effect);
   assert.ok(Math.hypot(p.x[id]-400,p.y[id]-300)<.1,`${effect}/${hz} settles`);
  }
+});
+
+test('portal starts at existing text geometry and converges to the centre without an initial jump',()=>{
+ const p=new ParticlePool(32,800,600);
+ const ids=p.form(2,[{x:200,y:230},{x:580,y:320}],0,0,'morph');
+ run(p,60,3000);
+ const before=ids.map(i=>({x:p.x[i],y:p.y[i]}));
+ const portal={...options,portalAt:3000};
+ stepPhysics(p,interaction,3000,1000/60,800,600,portal);
+ ids.forEach((i,n)=>assert.ok(Math.hypot(p.x[i]-before[n].x,p.y[i]-before[n].y)<.01,'no impulse at portal entry'));
+ for(let t=3016.67;t<6500;t+=1000/60) stepPhysics(p,interaction,t,1000/60,800,600,portal);
+ ids.forEach(i=>assert.ok(Math.hypot(p.x[i]-400,p.y[i]-264)<.1,'portal reaches its centre'));
 });
 test('pointer pressure returns home and reversible hold does not leak target text before interaction',()=>{
  const p=new ParticlePool(32,800,600);p.form(2,[{x:400,y:300}],0,1000,'morph');run(p,60,3000);
@@ -34,6 +84,20 @@ test('pointer pressure returns home and reversible hold does not leak target tex
  run(p,60,5000);assert.ok(Math.abs(p.x[id]-400)<.1);
  const before=p.x[id];p.form(2,[{x:650,y:500}],0,1000,'spiral');run(p,60,1000,{...options,hold:0});assert.ok(Math.abs(p.x[id]-before)<.1);
  run(p,60,4000,{...options,hold:1});assert.ok(Math.abs(p.x[id]-650)<.1);
+});
+test('hover shimmer stays local to interface particles and moves them smoothly',()=>{
+ const hovered=new ParticlePool(12,800,600),plain=new ParticlePool(12,800,600);
+ const target={x:500,y:300,uiElement:1};
+ const hoveredIds=hovered.form(1,[target],0,0,'morph'),plainIds=plain.form(1,[target],0,0,'morph');
+ run(hovered,60,2600);run(plain,60,2600);
+ const wave={pointers:new Map(),ripples:[],hoverWaves:[{x:400,y:260,width:100,height:80,start:2600}]} as unknown as InteractionSystem;
+ stepPhysics(hovered,wave,2900,1000/60,800,600,options);
+ stepPhysics(plain,interaction,2900,1000/60,800,600,options);
+ const shift=Math.hypot(hovered.x[hoveredIds[0]]-plain.x[plainIds[0]],hovered.y[hoveredIds[0]]-plain.y[plainIds[0]]);
+ assert.ok(shift>.05&&shift<4,'button contour gets a restrained local shimmer');
+ for(let i=0;i<hovered.count;i++) if(!hovered.owner[i]) {
+  assert.ok(Math.abs(hovered.x[i]-plain.x[i])<.001&&Math.abs(hovered.y[i]-plain.y[i])<.001,'ambient particles stay untouched');
+ }
 });
 test('reduced motion suppresses pointer, ripple, portal, tilt and drift',()=>{
  const p=new ParticlePool(32,800,600);p.form(2,[{x:400,y:300}],0,1000,'portal');

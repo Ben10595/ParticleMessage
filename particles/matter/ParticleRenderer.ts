@@ -1,5 +1,5 @@
 import type { ParticlePool } from './MorphSystem';
-import { CAPACITY, type Box } from './types';
+import { Behavior, CAPACITY, COLORS, type Box } from './types';
 const vertex = `#version 300 es
 precision highp float;
 layout(location=0) in vec2 corner;
@@ -15,7 +15,7 @@ void main(){
   float speed=length(velocity);
   vec2 direction=speed>0.01 ? velocity/speed : vec2(1.0,0.0);
   vec2 normal=vec2(-direction.y,direction.x);
-  float stretch=min(speed*0.025,12.0)*trails;
+  float stretch=min(sqrt(speed)*0.12,4.5)*trails;
   vec2 local=direction*corner.x*(particle.z*2.7+stretch)+normal*corner.y*particle.z*2.7;
   vec2 pixel=particle.xy+local;
   gl_Position=vec4(pixel.x/viewport.x*2.0-1.0,1.0-pixel.y/viewport.y*2.0,0.0,1.0);
@@ -96,7 +96,17 @@ export class ParticleRenderer {
       d[n+2] = p.radius[i] * (owned ? 1 : .65 + (p.z[i] + 65) / 180); d[n+3] = p.alpha[i];
       if (clip && p.owner[i] === 2 && (d[n] < clip.x || d[n] > clip.x + clip.width || d[n+1] < clip.y || d[n+1] > clip.y + clip.height)) d[n+3] = 0;
       d[n+4] = p.color[i*3]; d[n+5] = p.color[i*3+1]; d[n+6] = p.color[i*3+2];
-      d[n+7] = p.vx[i]; d[n+8] = p.vy[i];
+      // A restrained warm shimmer follows moving scene dots and vanishes as they settle.
+      if (!reduced && p.owner[i] === 2 && p.state[i] === Behavior.FORMING) {
+        const warmth = Math.min(.28,Math.hypot(p.vx[i],p.vy[i])*.0008);
+        d[n+4] += (COLORS.gold[0]-d[n+4])*warmth;
+        d[n+5] += (COLORS.gold[1]-d[n+5])*warmth;
+        d[n+6] += (COLORS.gold[2]-d[n+6])*warmth;
+      }
+      const sceneMotion = p.owner[i] >= 2 && (p.state[i] === Behavior.FORMING || p.state[i] === Behavior.MAGNETIC || p.state[i] === Behavior.PORTAL);
+      const releasedMotion = !owned && (p.state[i] === Behavior.DISPERSE || p.state[i] === Behavior.EXPLODE);
+      const trailScale = sceneMotion ? 1 : releasedMotion ? .32 : 0;
+      d[n+7] = p.vx[i] * trailScale; d[n+8] = p.vy[i] * trailScale;
     }
     this.renderedCount = count;
     const gl = this.gl;

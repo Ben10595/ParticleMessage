@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import ParticleExperience from '@/components/ParticleExperience';
+import ParticleExperience from '@/components/erlebnis/ParticleExperience';
 import { ACCESS_COOKIE, sessionTokenMatches } from '@/lib/passwordAuth';
 
 export const dynamic = 'force-dynamic';

@@ -10,6 +10,7 @@ import { sampleShape } from './ShapeSampler';
 import { InteractionSystem } from './InteractionSystem';
 import { stepPhysics, type PhysicsOptions } from './PhysicsSystem';
 import { QualityManager } from './QualityManager';
+import { MOTION_TIMING, response } from './motion';
 import { COLORS, type Box, type FormOptions, type Sample, type Target } from './types';
 export type { FormOptions } from './types';
 interface Message { text: string; options: FormOptions; start: number; timeline: number[]; duration: number; completion: number; sample: Sample }
@@ -25,6 +26,8 @@ export class ParticleEngine {
   private quality = new QualityManager();
   private events = new AbortController();
   private motion = matchMedia('(prefers-reduced-motion: reduce)');
+  private userReducedMotion = false;
+  private particlesEnabled = true;
   private frame = 0; private refreshFrame = 0; private lastFrame = 0; private disposed = false; private lost = false;
   private positionDirty = false;
   private uiElements: { el: HTMLElement; rect: DOMRect; slots: number[] }[] = [];
@@ -69,13 +72,24 @@ export class ParticleEngine {
     this.style = next;
     if (changed) { this.uiSignature = ''; this.refresh(); }
   }
+  setMotionPreference(reduced: boolean) {
+    this.userReducedMotion = reduced;
+    this.reducedMotion = reduced || this.motion.matches;
+    if (this.reducedMotion) this.setTilt(0, 0);
+    this.refresh();
+  }
+  setParticlesEnabled(enabled: boolean) {
+    if (this.particlesEnabled === enabled) return;
+    this.particlesEnabled = enabled;
+    if (enabled) { this.lastFrame = 0; this.refresh(); }
+  }
   private get budget() { const density = this.style.density === 'light' ? .65 : this.style.density === 'rich' ? 1.15 : 1; return Math.floor((this.width < 700 ? 4500 : 7000) * this.quality.level * density); }
   private resize = () => {
     this.width = window.innerWidth; this.height = window.visualViewport?.height ?? window.innerHeight;
     this.renderer.resize(this.width, this.height, Math.min(window.devicePixelRatio || 1, this.renderer.kind === 'canvas2d' ? 1.5 : 2) * Math.max(.75, this.quality.level));
     this.uiSignature = ''; this.refresh();
   };
-  private changeMotion = () => { this.reducedMotion = this.motion.matches; if (this.reducedMotion) this.setTilt(0,0); this.refresh(); };
+  private changeMotion = () => { this.reducedMotion = this.userReducedMotion || this.motion.matches; if (this.reducedMotion) this.setTilt(0,0); this.refresh(); };
   private visibility = () => {
     cancelAnimationFrame(this.frame); this.setHeld(false); this.lastFrame = 0;
     if (!document.hidden && !this.disposed && !this.lost) this.frame = requestAnimationFrame(this.tick);
@@ -143,7 +157,7 @@ export class ParticleEngine {
     }
     const uiBudget = Math.min(this.budget + 1500, Math.floor(this.pool.count * .57));
     const sampled = targets.length > uiBudget ? Array.from({ length:uiBudget },(_,i)=>targets[Math.floor(i*targets.length/uiBudget)]) : targets;
-    this.pool.form(UI, sampled, this.time, this.reducedMotion ? 0 : 1050 / this.style.speed, 'morph');
+    this.pool.form(UI, sampled, this.time, this.reducedMotion ? 0 : MOTION_TIMING.interface / this.style.speed, 'morph');
     const byElement = entries.map(({el,rect}) => ({el,rect,slots:[] as number[]}));
     for (const i of this.pool.groups.get(UI) ?? []) byElement[this.pool.uiElement[i] - 1]?.slots.push(i);
     this.uiElements = byElement;
@@ -158,12 +172,11 @@ export class ParticleEngine {
     const opts = typeof options === 'boolean' ? {} : { ...options };
     if (opts.effect === 'random') { const choices = EFFECTS.filter(e => e !== 'random'); opts.effect = choices[Math.floor(Math.random()*choices.length)]; }
     const timeline = opts.writing?.enabled ? typingTimeline(text, opts.writing) : graphemes(text).map(() => 0);
-    const duration = this.reducedMotion ? 0 : 1150 / this.style.speed;
-    const completion = this.reducedMotion ? 0 : (opts.writing?.enabled ? (timeline.at(-1) ?? 0) : 600 / this.style.speed) + duration + 500;
+    const duration = this.reducedMotion ? 0 : MOTION_TIMING.text / this.style.speed;
     this.hold = opts.hold ? { progress: 0, pressed: false } : null;
-    this.message = { text, options: opts, start: this.time, timeline, duration, completion, sample: { targets: [], glyphs: [], fontSize: 0, lineCount: 0 } };
+    this.message = { text, options: opts, start: this.time, timeline, duration, completion: 0, sample: { targets: [], glyphs: [], fontSize: 0, lineCount: 0 } };
     this.layoutMessage(this.message);
-    return completion;
+    return this.message.completion;
   }
   private layoutMessage(message: Message, refresh = false) {
     const rect = message.options.bounds?.();
@@ -180,11 +193,12 @@ export class ParticleEngine {
       if (!message.options.writing?.enabled) {
         if (['sweep','pixel','wave'].includes(effect)) delay = (t.x-box.x)/box.width*600 / this.style.speed;
         else if (effect === 'typewriter') delay = (t.glyph ?? 0) / Math.max(1,message.timeline.length) * 600 / this.style.speed;
-        else delay = ((t.x * .17 + t.y * .13) % 1) * 180 / this.style.speed;
+        else delay = ((t.x - box.x) / box.width * .65 + (t.y - box.y) / box.height * .35) * 180 / this.style.speed;
       }
       return { ...t, delay: this.reducedMotion || this.hold ? 0 : delay };
     });
     message.sample = sample;
+    message.completion = this.reducedMotion ? 0 : Math.max(0,...targets.map(t=>t.delay)) + message.duration + 220;
     this.pool.form(SCENE,targets,refresh ? message.start : this.time,message.duration,effect);
     this.canvas.dataset.textFont = font; this.canvas.dataset.textEffect = effect;
     this.canvas.dataset.textFontSize = String(sample.fontSize); this.canvas.dataset.textLineCount = String(sample.lineCount);
@@ -195,12 +209,12 @@ export class ParticleEngine {
     this.pool.release(SECRET,this.time,.2);
     this.message = null; this.secret = null; this.hold = null; this.shape = shape; this.clip = null;
     this.giftAt = this.portalAt = this.releaseAt = null; this.floating = false;
-    const duration = this.reducedMotion ? 0 : 1400 / this.style.speed;
+    const duration = this.reducedMotion ? 0 : MOTION_TIMING.shape / this.style.speed;
     const targets = sampleShape(shape,this.width,this.height);
     this.pool.form(SCENE,targets,this.time,duration,'spiral'); this.canvas.dataset.textTargetCount = String(targets.length);
-    return duration + (this.reducedMotion ? 0 : 500);
+    return duration + (this.reducedMotion ? 0 : 220);
   }
-  formImage(source: CanvasImageSource, box: Box) { this.disperseText(.1); this.clip = box; this.pool.form(SCENE,this.sampler.image(source,box,this.budget),this.time,1300,'morph'); }
+  formImage(source: CanvasImageSource, box: Box) { this.disperseText(.1); this.clip = box; this.pool.form(SCENE,this.sampler.image(source,box,this.budget),this.time,this.reducedMotion ? 0 : MOTION_TIMING.image / this.style.speed,'morph'); }
   disperseText(strength = .8) { this.pool.release(SECRET,this.time,strength); this.pool.release(SCENE,this.time,strength); this.message = null; this.shape = null; this.secret = null; this.hold = null; this.giftAt = this.portalAt = null; this.releaseAt = this.time; this.clip = null; }
   loosenText() { this.disperseText(.2); }
   disperseParticles(strength = 1) { this.disperseText(strength); this.pool.release(UI,this.time,strength); this.root = null; this.departing = true; this.uiSignature = ''; }
@@ -235,7 +249,7 @@ export class ParticleEngine {
     this.canvas.dataset.secretTargetCount=String(sample.targets.length);
     slots.forEach((i,n) => {
       const t = sample.targets[Math.floor(n*sample.targets.length/Math.max(1,slots.length))]; if (!t) return;
-      p.fx[i]=p.x[i];p.fy[i]=p.y[i];p.tx[i]=t.x;p.ty[i]=t.y;p.tz[i]=45;p.radius[i]=t.radius ?? 1;p.start[i]=this.time;p.duration[i]=700;p.delay[i]=0;
+      p.fx[i]=p.guideX[i]=p.x[i];p.fy[i]=p.guideY[i]=p.y[i];p.driftVX[i]=p.vx[i];p.driftVY[i]=p.vy[i];p.tx[i]=t.x;p.ty[i]=t.y;p.tz[i]=45;p.radius[i]=t.radius ?? 1;p.start[i]=this.time;p.duration[i]=700;p.delay[i]=0;
     });
     const active = new Set(slots);
     for (const i of p.groups.get(SCENE) ?? []) if (!active.has(i)) p.opacity[i]=.38;
@@ -244,26 +258,29 @@ export class ParticleEngine {
   restoreSecret() {
     if (!this.secret) return;
     const p=this.pool; p.release(SECRET,this.time,.2);
-    for (const [i,t] of this.secret.original) { p.fx[i]=p.x[i];p.fy[i]=p.y[i];p.tx[i]=t.x;p.ty[i]=t.y;p.tz[i]=t.z ?? 0;p.radius[i]=t.radius ?? 1;p.opacity[i]=t.alpha ?? .94;p.start[i]=this.time;p.duration[i]=700;p.delay[i]=0; }
+    for (const [i,t] of this.secret.original) { p.fx[i]=p.guideX[i]=p.x[i];p.fy[i]=p.guideY[i]=p.y[i];p.driftVX[i]=p.vx[i];p.driftVY[i]=p.vy[i];p.tx[i]=t.x;p.ty[i]=t.y;p.tz[i]=t.z ?? 0;p.radius[i]=t.radius ?? 1;p.opacity[i]=t.alpha ?? .94;p.start[i]=this.time;p.duration[i]=700;p.delay[i]=0; }
     this.secret=null;
   }
-  triggerHoverSparks(rect: Box) { if (!this.reducedMotion) this.interaction.ripple(rect.x+rect.width/2,rect.y+rect.height/2,.12); }
+  triggerHoverSparks(rect: Box) { if (!this.reducedMotion) this.interaction.hover(rect); }
   emitTypingFlow(rect?: DOMRect, _target?: DOMRect | null) { void _target; if (rect) this.triggerHoverSparks(rect); }
   private tick = (now: number) => {
     if (this.disposed || document.hidden || this.lost) return;
-    if (this.lastFrame && now - this.lastFrame < 15) { this.frame=requestAnimationFrame(this.tick); return; }
+    // Follow the display cadence. A 15 ms cutoff starves 90/144 Hz screens of frames.
     const raw = this.lastFrame ? now-this.lastFrame : 16.67, elapsed=Math.min(50,raw);this.lastFrame=now;this.time+=elapsed;
     try {
-      if (this.positionDirty) this.syncPositions();
+      if (this.particlesEnabled && this.positionDirty) this.syncPositions();
       if (this.hold) {
         const before=this.hold.progress;this.hold.progress=advanceHold(before,this.hold.pressed,elapsed,this.reducedMotion);
         if (before<1 && this.hold.progress>=1) this.shockwave(.45);
       }
-      this.tilt.x+=(this.tilt.targetX-this.tilt.x)*.06;this.tilt.y+=(this.tilt.targetY-this.tilt.y)*.06;
-      this.interaction.update(this.time);
-      const options: PhysicsOptions={ reduced:this.reducedMotion,hold:this.hold?.progress ?? null,tiltX:this.tilt.x,tiltY:this.tilt.y,floating:this.floating,giftAt:this.giftAt,portalAt:this.portalAt,atmosphere:this.atmosphere,quality:this.quality.level,style:this.style };
-      stepPhysics(this.pool,this.interaction,this.time,elapsed,this.width,this.height,options);
-      this.renderer.draw(this.pool,this.style.trails? .45:0,this.tilt.x,this.tilt.y,this.reducedMotion,this.clip);
+      const tiltResponse = response(elapsed, 3.7);
+      this.tilt.x+=(this.tilt.targetX-this.tilt.x)*tiltResponse;this.tilt.y+=(this.tilt.targetY-this.tilt.y)*tiltResponse;
+      if (this.particlesEnabled) {
+        this.interaction.update(this.time, elapsed);
+        const options: PhysicsOptions={ reduced:this.reducedMotion,hold:this.hold?.progress ?? null,tiltX:this.tilt.x,tiltY:this.tilt.y,floating:this.floating,giftAt:this.giftAt,portalAt:this.portalAt,atmosphere:this.atmosphere,quality:this.quality.level,style:this.style };
+        stepPhysics(this.pool,this.interaction,this.time,elapsed,this.width,this.height,options);
+        this.renderer.draw(this.pool,this.style.trails? .45:0,this.tilt.x,this.tilt.y,this.reducedMotion,this.clip);
+      }
       if (this.time-this.lastDiagnostics>80) {
         this.lastDiagnostics=this.time;
         this.canvas.dataset.holdProgress=this.holdProgress.toFixed(3);

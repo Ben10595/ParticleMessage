@@ -32,19 +32,20 @@ test('new reveal paths and physics settings survive public playback',async({page
 test('particle controls persist in the saved message',async({page})=>{
  await page.goto('/');await page.getByLabel('Passwort',{exact:true}).fill('particle-test');await page.getByRole('button',{name:'Öffnen',exact:true}).click();await page.getByRole('button',{name:'Nachricht erstellen',exact:true}).click();
  await page.getByRole('textbox',{name:'ABSCHNITT 01'}).fill('Du fehlst.');
- await page.locator('summary').filter({hasText:'Die Partikelwelt'}).click();
+ await page.locator('summary').filter({hasText:'Bewegung & Atmosphäre'}).click();
  await page.getByRole('combobox',{name:'Partikelphysik',exact:true}).click();await page.getByRole('option',{name:'Magnetic',exact:true}).click();
  await page.getByRole('combobox',{name:'Partikelmenge',exact:true}).click();await page.getByRole('option',{name:'Leicht',exact:true}).click();
  await page.getByLabel('Animationsgeschwindigkeit').fill('1.5');await page.getByRole('switch',{name:'Leichter Wind',exact:true}).check();
  let saved:MessageContent|undefined;
  await page.route('**/rest/v1/messages*',route=>{saved=route.request().postDataJSON().content;return route.fulfill({status:201,body:''});});
- await page.getByRole('button',{name:'Link erstellen',exact:true}).click();await expect(page.getByLabel('Link zu deiner Nachricht')).toHaveValue(/\/m\/[A-Za-z0-9_-]{12}$/);
+ await page.getByRole('button',{name:'Nachricht senden',exact:true}).click();await expect(page.getByLabel('Link zu deiner Nachricht')).toHaveValue(/\/m\/[A-Za-z0-9_-]{12}$/);
  expect(saved?.settings?.particles).toMatchObject({preset:'magnetic',density:'light',speed:1.5,wind:true});
 });
-test('homepage has one shared particle canvas and readable responsive actions',async({page},info)=>{
+test('homepage keeps the particle canvas dormant behind the responsive Message Core',async({page},info)=>{
  await page.goto('/');await page.getByLabel('Passwort',{exact:true}).fill('particle-test');await page.getByRole('button',{name:'Öffnen',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Kleine Worte. Großes Gefühl.'})).toBeVisible();
- await expect.poll(async()=>Number(await page.locator('canvas').getAttribute('data-ui-target-count'))).toBeGreaterThan(1000);
+ await expect(page.getByRole('heading',{name:'Was möchtest du sagen?'})).toBeVisible();
+ await expect(page.locator('.message-core')).toBeVisible();
+ await expect.poll(async()=>Number(await page.locator('canvas').getAttribute('data-ui-target-count'))).toBe(0);
  await page.waitForTimeout(2000);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:`test-results/matter-home-${info.project.name}.png`});

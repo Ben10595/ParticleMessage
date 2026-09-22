@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 
-import { useLinePresence } from './useLinePresence';
+import { useLinePresence } from '../hooks/useLinePresence';
 
 interface Option { value: string; label: string; disabled?: boolean; preview?: ReactNode }
 interface Props { label: string; value: string; options: Option[]; disabled?: boolean; onChange: (value: string) => void }
