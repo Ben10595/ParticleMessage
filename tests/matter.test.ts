@@ -104,6 +104,45 @@ test('reduced motion suppresses pointer, ripple, portal, tilt and drift',()=>{
  run(p,60,100,{...options,reduced:true,floating:true,portalAt:0,tiltX:100,tiltY:100});
  const id=p.groups.get(2)![0];assert.equal(p.x[id],400);assert.equal(p.y[id],300);assert.equal(p.vx[id],0);
 });
+test('sequenced reveals hide future glyphs and a changed animation replays cleanly',()=>{
+ const p=new ParticlePool(1,800,600);
+ const [id]=p.form(2,[{x:400,y:300,delay:500}],0,240,'typewriter');
+ stepPhysics(p,interaction,100,1000/60,800,600,options);
+ assert.equal(p.alpha[id],0,'the next character is fully hidden');
+ p.form(2,[{x:400,y:300,delay:0}],100,1000,'fade');
+ assert.equal(p.alpha[id],0,'changing the effect starts a fresh reveal');
+ stepPhysics(p,interaction,600,1000/60,800,600,options);
+ assert.ok(p.alpha[id]>0 && p.alpha[id]<p.opacity[id]);
+ run(p,60,2200);
+ assert.ok(p.alpha[id]>.9,'the final letter is readable');
+ const beforeResize=p.alpha[id];
+ p.form(2,[{x:420,y:305,delay:0}],100,1000,'fade',false,false);
+ assert.equal(p.alpha[id],beforeResize,'a layout refresh keeps already revealed text visible');
+});
+test('preview presets take different paths while every effect reaches exact text geometry',()=>{
+ const at=(effect:typeof EFFECTS[number])=>{
+  const p=new ParticlePool(1,800,600);
+  const [id]=p.form(2,[{x:400,y:300,radius:2}],0,1000,effect);
+  stepPhysics(p,interaction,500,1000/60,800,600,options);
+  return {x:p.x[id],y:p.y[id],alpha:p.alpha[id],radius:p.radius[id]};
+ };
+ const fade=at('fade'),assemble=at('collect'),typewriter=at('typewriter'),floating=at('floatingWords'),wave=at('wave'),fragment=at('scatter'),glow=at('bloom'),decode=at('pixel');
+ assert.ok(Math.abs(fade.x-400)<.01 && Math.abs(fade.y-300)<.01,'reveal forms in place');
+ assert.ok(typewriter.y>fade.y+5,'typewriter settles each glyph');
+ assert.ok(floating.y>typewriter.y+15,'floating words lift from below');
+ assert.ok(Math.abs(wave.y-fade.y)>10,'wave carries text vertically');
+ assert.ok(Math.hypot(assemble.x-fade.x,assemble.y-fade.y)>20,'letters assemble from nearby dust');
+ assert.ok(Math.hypot(fragment.x-fade.x,fragment.y-fade.y)>10,'fragments spread before joining');
+ assert.ok(Math.hypot(fragment.x-assemble.x,fragment.y-assemble.y)>20,'fragments and assemble take different paths');
+ assert.ok(glow.radius>3.5,'glow has a distinct particle pulse');
+ assert.ok(Math.hypot(decode.x-fade.x,decode.y-fade.y)>8,'decode passes through a scan grid');
+ for(const effect of ['fade','collect','pixel','typewriter','wave','scatter','bloom','wordByWord','floatingWords'] as const){
+  const p=new ParticlePool(1,800,600),[id]=p.form(2,[{x:400,y:300,delay:300}],0,1000,effect);
+  stepPhysics(p,interaction,50,1000/60,800,600,{...options,reduced:true});
+  assert.equal(p.x[id],400,effect);assert.equal(p.y[id],300,effect);
+  assert.equal(p.alpha[id],p.opacity[id],effect);assert.equal(p.radius[id],p.baseRadius[id],effect);
+ }
+});
 test('gift has sampled front/side surfaces, depth, and a separate lid and bow',()=>{
  const targets=sampleShape('gift',390,844);const body=targets.filter(p=>!p.part),lid=targets.filter(p=>p.part===1);
  assert.ok(body.length>1000);assert.ok(lid.length>1000);assert.ok(new Set(body.map(p=>p.z)).size>20);

@@ -32,7 +32,7 @@ export default function LivePreview({ active, particlesEnabled, engine, slide, s
         const rect = frame.getBoundingClientRect();
         const right = Math.max(0, innerWidth - rect.right);
         const bottom = Math.max(0, innerHeight - rect.bottom);
-        canvas.style.clipPath = `inset(${Math.max(0, rect.top)}px ${right}px ${bottom}px ${Math.max(0, rect.left)}px round 22px)`;
+        canvas.style.clipPath = `inset(${Math.max(0, rect.top)}px ${right}px ${bottom}px ${Math.max(0, rect.left)}px round 11px)`;
       });
     };
     clip();

@@ -20,6 +20,12 @@ const animationPresets: { label: string; effect: TransitionEffect }[] = [
   { label: 'Glow Pulse', effect: 'bloom' }, { label: 'Word by Word', effect: 'wordByWord' },
   { label: 'Floating Words', effect: 'floatingWords' },
 ];
+const quickAnimations: { label: string; effect: TransitionEffect; symbol: string }[] = [
+  { label: 'Formwechsel', effect: 'morph', symbol: '◇' },
+  { label: 'Aufblühen', effect: 'bloom', symbol: '✳' },
+  { label: 'Schweben', effect: 'floatingWords', symbol: '◌' },
+  { label: 'Schreiben', effect: 'typewriter', symbol: '▮' },
+];
 const pauses = [
   { key: 'speed', label: 'Pro Zeichen', min: 20, max: 250, step: 5 },
   { key: 'commaPause', label: 'Komma ,', min: 0, max: 2500, step: 50 },
@@ -77,7 +83,7 @@ export default function ParticleEditor({ previewActive, particlesEnabled, slides
   }
   const preset = Object.entries(WRITING_PRESETS).find(([, p]) => Object.entries(p).every(([key, value]) => writing[key as keyof WritingSettings] === value))?.[0] ?? 'Eigene Werte';
   return <section className="editor" aria-label="Nachrichteneditor" aria-busy={busy}>
-    <div className="editor-heading"><p className="eyebrow"><span className="signal-mark" aria-hidden="true" /> DER COMPOSER</p><h1>Gib deinen Worten<br /><span>eine Form.</span></h1><p className="editor-description">Schreib einen Moment. Schau zu, wie er lebendig wird.</p></div>
+    <div className="editor-heading"><div><p className="eyebrow"><span className="signal-mark" aria-hidden="true" /> DEIN STUDIO</p><h1>Dein <span>Moment.</span></h1><p className="editor-description">Schreib deine Nachricht. Die Bühne zeigt dir sofort, wie sie wirkt.</p></div><ol className="composer-steps" aria-label="So entsteht deine Nachricht"><li><span>01</span> Schreiben</li><li><span>02</span> Gestalten</li><li><span>03</span> Teilen</li></ol></div>
     <div className="editor-grid"><div className="editor-panel">
       <div className="section-heading"><span>01 / Deine Nachricht</span><span>{slides.length} / {MAX_SLIDES} MOMENTE</span></div>
       <nav className="slide-tabs" aria-label="Abschnitte">
@@ -90,7 +96,14 @@ export default function ParticleEditor({ previewActive, particlesEnabled, slides
       <div className="slide-actions"><button data-particle="button" data-icon="left" aria-label="Abschnitt nach vorne" disabled={active === 0 || busy} onClick={() => move(-1)}>←</button><button data-particle="button" data-icon="arrow" aria-label="Abschnitt nach hinten" disabled={active === slides.length - 1 || busy} onClick={() => move(1)}>→</button><button data-particle="button" data-icon="close" aria-label="Abschnitt löschen" disabled={slides.length === 1 || busy} onClick={() => { onChange(slides.filter((_, index) => index !== active)); onSelect(Math.max(0, active - 1)); }}>×</button></div></div>
       <button data-particle="button" className="mark-secret" disabled={busy} onMouseDown={event => event.preventDefault()} onClick={markSecret}>Auswahl geheim ◌</button>
       {secretNotice && <p className="setting-note" role="status">{secretNotice}</p>}
+      <div className="motion-header"><span>WIE SOLLEN DIE WORTE ERSCHEINEN?</span><span>{EFFECT_LABELS[effect]}</span></div>
+      <div className="motion-picks" role="group" aria-label="Schnelle Animationen">{quickAnimations.map(item => <button key={item.effect} type="button" aria-pressed={effect === item.effect} disabled={busy} onClick={() => update({ effect: item.effect })}><span aria-hidden="true">{item.symbol}</span>{item.label}</button>)}</div>
+      <p className="motion-description">{EFFECT_DESCRIPTIONS[effect]}</p>
+      {error && <p data-particle="text" role="alert" className="error-message">{error}</p>}
+      <div className="editor-bottom"><button className="secondary" onClick={onPreview} disabled={busy}><span aria-hidden="true">▶</span> Vorschau</button><button className="primary" onClick={onSave} disabled={busy}>{busy ? 'Core lädt …' : 'Nachricht senden'} <span aria-hidden="true">↗</span></button></div>
+      <p className="expiry-note"><span aria-hidden="true">⌁</span> Der Link bleibt 3 Tage gültig.</p>
       <div className="particle-divider" />
+      <div className="composer-settings-heading"><span>FEINSCHLIFF</span><span>für diesen Abschnitt</span></div>
       <div className="settings-group">
         <div className="control-row"><span data-particle="text">Schriftart</span><ParticleSelect label="Schriftart dieses Abschnitts" value={font} disabled={busy} onChange={value => update({ font: value as MessageFont })} options={FONTS.map(value => ({ value, label: FONT_LABELS[value], preview: <FontSample font={value} /> }))} /></div>
         <div className="control-row"><span data-particle="text">Schriftgröße</span><ParticleSelect label="Schriftgröße dieses Abschnitts" value={size} disabled={busy} onChange={value => update({ size: value as TextSize })} options={[{ value: 'small', label: 'Klein' }, { value: 'medium', label: 'Mittel' }, { value: 'large', label: 'Groß' }]} /></div>
@@ -107,9 +120,6 @@ export default function ParticleEditor({ previewActive, particlesEnabled, slides
         return <label className="range-control" key={item.key}><span><span data-particle="text">{item.label}</span><output data-particle="text">{Math.round(value)} ms</output></span><input data-particle="range" aria-label={item.label} type="range" min={item.min} max={item.max} step={item.step} disabled={busy} value={value} onChange={event => write({ [item.key]: Number(event.target.value) })} /></label>;
       })}</div></details>}
       <SceneFeatureEditor slide={slide} settings={settings} busy={busy} update={features => update({ features })} onSettingsChange={onSettingsChange} />
-      {error && <p data-particle="text" role="alert" className="error-message">{error}</p>}
-      <div className="editor-bottom"><button className="secondary" onClick={onPreview} disabled={busy}><span aria-hidden="true">▶</span> Vorschau</button><button className="primary" onClick={onSave} disabled={busy}>{busy ? 'Core lädt …' : 'Nachricht senden'} <span aria-hidden="true">↗</span></button></div>
-      <p className="expiry-note"><span aria-hidden="true">⌁</span> Der Link bleibt 3 Tage gültig.</p>
     </div><LivePreview active={previewActive} particlesEnabled={particlesEnabled} engine={engine} slide={slide} settings={settings} onTest={onPreview} />
     <aside className="mood-panel" aria-label="Stimmung und Darstellung">
       <div className="section-heading"><span>03 / Atmosphäre</span><span>LIVE</span></div>

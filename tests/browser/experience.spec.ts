@@ -81,8 +81,8 @@ test('message mood, typography, background, sound and QR code persist', async ({
   });
   await page.getByRole('button', { name: 'Nachricht senden', exact: true }).click();
   await expect(page.getByRole('img', { name: 'QR-Code zum Öffnen der Nachricht' })).toBeVisible();
-  expect(saved?.slides[0]).toMatchObject({ size: 'large', align: 'left', effect: 'bloom' });
-  expect(saved?.settings).toMatchObject({ mood: 'dream', background: 'night', sound: true });
+  expect(saved?.slides[0]).toMatchObject({ size: 'large', align: 'left' });
+  expect(saved?.settings).toMatchObject({ mood: 'dream', background: 'night', sound: true, effect: 'bloom' });
 });
 test('automatic mood follows message text when enabled', async ({ page }) => {
   await unlock(page);
@@ -100,6 +100,10 @@ test('word animation preset updates the live particle preview', async ({ page })
   await expect(page.locator('canvas')).toHaveAttribute('data-text-effect', 'wordByWord');
   await page.getByRole('button', { name: 'Floating Words', exact: true }).click();
   await expect(page.locator('canvas')).toHaveAttribute('data-text-effect', 'floatingWords');
+  await select(page, 'Schriftart dieses Abschnitts', 'Mono');
+  await page.getByRole('group', { name: 'Stimmung wählen' }).getByRole('button', { name: /Dream/ }).click();
+  await expect(page.locator('canvas')).toHaveAttribute('data-text-effect', 'floatingWords');
+  await expect(page.locator('canvas')).toHaveAttribute('data-text-font', 'mono');
 });
 test('password rejection, signed httpOnly session, reload, and shared canvas across scenes', async ({ page, context }) => {
   await page.goto('/');

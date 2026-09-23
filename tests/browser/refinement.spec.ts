@@ -23,7 +23,7 @@ test('page text cannot be selected or copied, while editing and secret selection
   await page.getByRole('button', { name: 'Auswahl geheim' }).click();
   await expect(page.getByLabel('Zusatznachricht 1')).toBeVisible();
 });
-test('scroll preserves particle assignments and the desktop stage stays fixed', async ({ page }, info) => {
+test('scroll preserves particle assignments and keeps the desktop stage in its column', async ({ page }, info) => {
   await home(page); await page.getByRole('button', { name: 'Nachricht erstellen', exact: true }).click();
   await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Deine Worte bleiben.');
   for (const title of ['Bewegung & Atmosphäre', 'Diesen Abschnitt besonders machen', 'Für die ganze Nachricht']) {
@@ -34,14 +34,17 @@ test('scroll preserves particle assignments and the desktop stage stays fixed', 
   const canvas = page.locator('canvas'), preview = page.getByLabel('Live-Vorschau');
   await expect(canvas).toHaveAttribute('data-phase', 'holding');
   await page.waitForTimeout(900);
-  const original = { ui: await canvas.getAttribute('data-ui-revision'), text: await canvas.getAttribute('data-text-revision'), box: await preview.boundingBox() };
+  const original = { ui: await canvas.getAttribute('data-ui-revision'), text: await canvas.getAttribute('data-text-revision') };
   for (const y of [160, 400, 650]) { await page.evaluate(y => window.scrollTo(0, y), y); await page.waitForTimeout(150); }
   expect(await canvas.getAttribute('data-ui-revision')).toBe(original.ui);
   expect(await canvas.getAttribute('data-text-revision')).toBe(original.text);
   if (info.project.name === 'desktop') {
     const box = (await preview.boundingBox())!;
-    expect(Math.abs(box.y - original.box!.y)).toBeLessThan(1);
+    expect(await preview.evaluate(el => getComputedStyle(el).position)).toBe('sticky');
+    expect(box.y).toBeGreaterThanOrEqual(0);
     expect(box.y + box.height).toBeLessThan(page.viewportSize()!.height);
+    const panel = (await page.locator('.editor-panel').boundingBox())!;
+    expect(box.x).toBeGreaterThan(panel.x + panel.width);
     await expect(preview).toBeInViewport();
   }
   await page.waitForTimeout(3500);
@@ -49,6 +52,27 @@ test('scroll preserves particle assignments and the desktop stage stays fixed', 
   expect(await canvas.getAttribute('data-text-revision')).toBe(original.text);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: `test-results/refined-editor-${info.project.name}.png` });
+});
+
+test('wide composer keeps writing, stage and mood controls separate and clickable', async ({ page }, info) => {
+  await page.setViewportSize({ width: 1978, height: 900 });
+  await home(page);
+  await page.getByRole('button', { name: 'Nachricht erstellen', exact: true }).click();
+  const input = page.getByRole('textbox', { name: 'ABSCHNITT 01' });
+  await input.fill('Ben');
+  const panel = (await page.locator('.editor-panel').boundingBox())!;
+  const preview = (await page.getByLabel('Live-Vorschau').boundingBox())!;
+  const mood = (await page.getByLabel('Stimmung und Darstellung').boundingBox())!;
+  expect(preview.x - (panel.x + panel.width)).toBeGreaterThanOrEqual(16);
+  expect(mood.x - (preview.x + preview.width)).toBeGreaterThanOrEqual(16);
+  expect(preview.y + preview.height).toBeLessThanOrEqual(900);
+  await input.click();
+  await input.press('!');
+  await expect(input).toHaveValue('Ben!');
+  await page.getByRole('button', { name: 'Aufblühen', exact: true }).click();
+  await expect(page.locator('canvas')).toHaveAttribute('data-text-effect', 'bloom');
+  await expect(page.locator('canvas')).toHaveAttribute('data-phase', 'holding');
+  await page.screenshot({ path: `test-results/composer-wide-${info.project.name}.png`, fullPage: false });
 });
 
 test('the refined editor fits narrow phones, landscape and tablet viewports', async ({ page }, info) => {

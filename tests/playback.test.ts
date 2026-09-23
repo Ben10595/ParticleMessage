@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { characterDelay, graphemes, isMessageExpired, LINK_LIFETIME_MS, typingTimeline, wordTimeline } from '../lib/playback';
+import { characterDelay, effectDuration, effectTimeline, graphemes, isMessageExpired, LINK_LIFETIME_MS, typingTimeline, wordTimeline } from '../lib/playback';
 import { DEFAULT_SETTINGS, EFFECTS, validateMessage, WRITING_PRESETS } from '../types/message';
 
 test('typing respects sentence, comma, paragraph pauses and emoji clusters', () => {
@@ -19,6 +19,26 @@ test('typing respects sentence, comma, paragraph pauses and emoji clusters', () 
 });
 test('word reveals group letters and separate words, including after line breaks', () => {
   assert.deepEqual(wordTimeline('Hi du\n❤️!', 100), [0, 0, 0, 100, 100, 100, 200, 200]);
+});
+test('nine reveal presets have distinct, bounded schedules and preserve emoji clusters', () => {
+  const text = 'Hi ❤️ du\njetzt';
+  const writing = { enabled: false, ...WRITING_PRESETS.Normal };
+  const typewriter = effectTimeline(text, 'typewriter', writing);
+  const words = effectTimeline(text, 'wordByWord', writing);
+  const floating = effectTimeline(text, 'floatingWords', writing);
+  assert.equal(typewriter.length, graphemes(text).length);
+  assert.ok(typewriter[1] > typewriter[0]);
+  assert.ok(typewriter.at(-1)! < 3201);
+  assert.equal(words[0], words[1]);
+  assert.equal(words[3], words[4], 'an emoji remains part of one word');
+  assert.ok(words[3] > words[0]);
+  assert.ok(floating.at(-1)! > words.at(-1)!);
+  assert.ok(effectDuration('typewriter') < effectDuration('wordByWord'));
+  assert.ok(effectDuration('wordByWord') < effectDuration('floatingWords'));
+  assert.ok(effectDuration('floatingWords') < effectDuration('wave'));
+  assert.deepEqual(effectTimeline(text, 'wave', { ...writing, enabled: true }), typingTimeline(text, { ...writing, enabled: true }));
+  assert.deepEqual(effectTimeline(text, 'typewriter', { ...writing, enabled: true }), typingTimeline(text, { ...writing, enabled: true }));
+  assert.deepEqual(effectTimeline(text, 'fade', writing), graphemes(text).map(() => 0));
 });
 test('expiry is exactly 72 hours, independent of timezone and fails closed for invalid dates', () => {
   const created = '2026-09-06T12:00:00.000Z';

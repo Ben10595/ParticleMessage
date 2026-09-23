@@ -23,6 +23,6 @@ export function applyMood(mood: MessageMood, settings: MessageSettings, slides: 
   const writingPreset = mood === 'energy' || mood === 'chaos' ? WRITING_PRESETS.Schnell : mood === 'calm' || mood === 'memory' ? WRITING_PRESETS.Ruhig : WRITING_PRESETS.Normal;
   return {
     settings: { ...settings, mood, background: mood === 'dream' || mood === 'memory' ? 'aurora' : mood === 'minimal' ? 'void' : 'night', effect: detail.effect, font: detail.font, particles, writing: { ...settings.writing, ...writingPreset } },
-    slides: slides.map(slide => ({ ...slide, effect: detail.effect, font: detail.font })),
+    slides,
   };
 }

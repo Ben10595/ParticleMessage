@@ -10,7 +10,7 @@ test('mood presets and per-moment typography survive the shared message format',
   assert.equal(draft.settings.mood, 'memory');
   assert.equal(draft.slides[0].size, 'large');
   assert.equal(draft.slides[0].align, 'left');
-  assert.equal(draft.slides[0].effect, 'dust');
+  assert.equal(slideSettings(draft.slides[0], draft.settings).effect, 'dust');
   const saved = validateMessage({ version: 1, ...draft });
   assert.equal(saved.settings?.mood, 'memory');
   assert.equal(saved.settings?.background, 'aurora');
@@ -20,6 +20,18 @@ test('mood presets and per-moment typography survive the shared message format',
   assert.throws(() => validateMessage({ version: 1, slides, settings: { ...DEFAULT_SETTINGS, mood: 'unknown' } }), /Stimmung/);
   assert.throws(() => validateMessage({ version: 1, slides, settings: { ...DEFAULT_SETTINGS, background: 'rainbow' } }), /Hintergrund/);
   assert.throws(() => validateMessage({ version: 1, slides, settings: { ...DEFAULT_SETTINGS, sound: 'yes' } }), /Toneinstellung/);
+});
+test('changing the mood keeps deliberately chosen animation and font on each moment', () => {
+  const slides = [
+    { text: 'Erster Moment', duration: 2500, effect: 'wave' as const, font: 'mono' as const },
+    { text: 'Zweiter Moment', duration: 2500 },
+  ];
+  const draft = applyMood('dream', DEFAULT_SETTINGS, slides);
+  assert.deepEqual(draft.slides, slides);
+  assert.equal(slideSettings(draft.slides[0], draft.settings).effect, 'wave');
+  assert.equal(slideSettings(draft.slides[0], draft.settings).font, 'mono');
+  assert.equal(slideSettings(draft.slides[1], draft.settings).effect, 'bloom');
+  assert.equal(slideSettings(draft.slides[1], draft.settings).font, 'handwriting');
 });
 test('fonts and animations survive validation and saving, with compatible legacy defaults', async () => {
   assert.equal(slideSettings(valid.slides[0]).font, DEFAULT_FONT);

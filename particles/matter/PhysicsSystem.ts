@@ -5,7 +5,7 @@ import type { ParticleStyle } from '../../types/message';
 import { MOTION_TIMING, easeInOut, response, revealArc } from './motion';
 const clamp = (x: number) => Math.max(0, Math.min(1, x));
 const TAU = Math.PI * 2;
-const fx = { morph: effectId('morph'), explosion: effectId('explosion'), spiral: effectId('spiral'), vortex: effectId('vortex'), wave: effectId('wave'), rain: effectId('rain'), implode: effectId('implode'), magnet: effectId('magnet'), rise: effectId('rise'), bloom: effectId('bloom'), zoom: effectId('zoom'), scatter: effectId('scatter'), collect: effectId('collect'), portal: effectId('portal'), gravity: effectId('gravity'), shockwave: effectId('shockwave'), orbit: effectId('orbit'), chaos: effectId('chaos'), dust: effectId('dust'), pixel: effectId('pixel') };
+const fx = { morph: effectId('morph'), explosion: effectId('explosion'), spiral: effectId('spiral'), vortex: effectId('vortex'), wave: effectId('wave'), rain: effectId('rain'), implode: effectId('implode'), magnet: effectId('magnet'), rise: effectId('rise'), bloom: effectId('bloom'), zoom: effectId('zoom'), scatter: effectId('scatter'), collect: effectId('collect'), portal: effectId('portal'), gravity: effectId('gravity'), shockwave: effectId('shockwave'), orbit: effectId('orbit'), chaos: effectId('chaos'), dust: effectId('dust'), pixel: effectId('pixel'), fade: effectId('fade'), typewriter: effectId('typewriter'), wordByWord: effectId('wordByWord'), floatingWords: effectId('floatingWords') };
 export interface PhysicsOptions { reduced: boolean; hold: number | null; tiltX: number; tiltY: number; floating: boolean; giftAt: number | null; portalAt: number | null; atmosphere: boolean; quality?: number; style: ParticleStyle }
 /** Seconds-based semi-implicit spring integration, substepped at <= 1/120 s.
  * Forces compose; the physical displacement is bounded around readable targets. */
@@ -25,6 +25,7 @@ export function stepPhysics(p: ParticlePool, interaction: InteractionSystem, now
     if (o.reduced && o.hold === null) progress = 1;
     let hx = p.tx[i], hy = p.ty[i], alpha = p.opacity[i];
     if (!owned) {
+      p.radius[i] = p.baseRadius[i];
       const ambient = i % 12 === 0 && o.atmosphere;
       // A slow tilted orbital field surrounds the hero; unassigned matter remains available.
       const a = angle + clock * .018 * (random + .3), r = scale * (.43 + random * .16);
@@ -43,8 +44,39 @@ export function stepPhysics(p: ParticlePool, interaction: InteractionSystem, now
     } else {
       const e = easeInOut(progress), arc = revealArc(progress), effect = p.effect[i];
       hx = p.fx[i] + (hx - p.fx[i]) * e; hy = p.fy[i] + (hy - p.fy[i]) * e;
+      p.radius[i] = p.baseRadius[i] * (!o.reduced && effect === fx.bloom ? 1 + .85 * Math.sin(Math.PI * progress) ** 4 : 1);
       if (!o.reduced) {
-        if (effect === fx.explosion || effect === fx.scatter || effect === fx.chaos) { const force = effect === fx.chaos ? 1.2 : .5; hx += Math.cos(angle + (effect === fx.chaos ? progress * 12 : 0)) * scale * arc * force; hy += Math.sin(angle + (effect === fx.chaos ? progress * 9 : 0)) * scale * arc * force; }
+        if (effect === fx.fade || effect === fx.wordByWord) {
+          hx = p.tx[i]; hy = p.ty[i]; alpha *= e;
+        }
+        else if (effect === fx.typewriter) {
+          hx = p.tx[i]; hy = p.ty[i] + (1 - e) * 14; alpha *= e;
+        }
+        else if (effect === fx.floatingWords) {
+          hx = p.tx[i] + Math.sin(angle) * (1 - e) * 7;
+          hy = p.ty[i] + (1 - e) * 58; alpha *= e;
+        }
+        else if (effect === fx.pixel) {
+          // Each decoded glyph enters on its own scan line, then resolves from
+          // coarse signal blocks into exact sampled letter points.
+          const remaining = 1 - e, cell = 18;
+          hx = p.tx[i] + (Math.round(p.tx[i] / cell) * cell - p.tx[i]) * remaining + Math.sin(progress * TAU * 3 + angle) * remaining * (7 + random * 8);
+          hy = p.ty[i] + (Math.round(p.ty[i] / cell) * cell - p.ty[i] - 38) * remaining;
+          alpha *= e;
+        }
+        else if (effect === fx.collect) {
+          const radius = (65 + random * 120) * (1 - e), turn = angle + progress * 2.2;
+          hx = p.tx[i] + Math.cos(turn) * radius;
+          hy = p.ty[i] + Math.sin(turn) * radius * .72 - 24 * (1 - e);
+          alpha *= e;
+        }
+        else if (effect === fx.scatter) {
+          const span = scale * (.28 + random * .3) * (1 - e);
+          hx = p.tx[i] + Math.cos(angle) * span + Math.sin(progress * 9 + angle) * (1 - e) * 18;
+          hy = p.ty[i] + Math.sin(angle) * span;
+          alpha *= e;
+        }
+        else if (effect === fx.explosion || effect === fx.chaos) { const force = effect === fx.chaos ? 1.2 : .5; hx += Math.cos(angle + (effect === fx.chaos ? progress * 12 : 0)) * scale * arc * force; hy += Math.sin(angle + (effect === fx.chaos ? progress * 9 : 0)) * scale * arc * force; }
         else if (effect === fx.spiral || effect === fx.orbit || effect === fx.portal || effect === fx.vortex) {
           const a = e * (effect === fx.orbit ? Math.PI : Math.PI*2), cos = Math.cos(a), sin = Math.sin(a);
           hx += (p.flowX[i]*cos-p.flowY[i]*sin)*arc*1.6;
@@ -57,18 +89,10 @@ export function stepPhysics(p: ParticlePool, interaction: InteractionSystem, now
         else if (effect === fx.implode || effect === fx.zoom) { hx += (p.tx[i] - cx) * arc * 3; hy += (p.ty[i] - cy) * arc * 3; }
         else if (effect === fx.magnet) { hx += (p.tx[i] - p.fx[i]) * Math.sin(progress * 10) * arc * .4; hy += (p.ty[i] - p.fy[i]) * Math.sin(progress * 10) * arc * .4; }
         else if (effect === fx.bloom) { hx -= (p.tx[i] - cx) * arc; hy -= (p.ty[i] - cy) * arc; }
-        else if (effect === fx.dust || effect === fx.collect) {
+        else if (effect === fx.dust) {
           const ribbon = p.flowX[i]*.012 + p.flowY[i]*.018;
           hx += Math.sin(ribbon+e*2.4)*arc*85;
           hy -= (48+Math.cos(ribbon+e*1.8)*24)*arc;
-        }
-        else if (effect === fx.pixel) {
-          // A flowing scan-grid replaces the old rigid block hop. It still resolves
-          // exactly at the glyph but bends through neighbouring pixel lanes.
-          const cell = 22, gridX = Math.round(p.tx[i] / cell) * cell - p.tx[i], gridY = Math.round(p.ty[i] / cell) * cell - p.ty[i];
-          const scan = Math.sin(progress * TAU + angle) * arc * (8 + random * 10);
-          hx += gridX * arc * 1.35 + scan;
-          hy += gridY * arc * 1.2 - arc * (34 + random * 24);
         }
         else if (effect === fx.morph) {
           const dx = p.tx[i]-p.fx[i], dy = p.ty[i]-p.fy[i], distance = Math.hypot(dx,dy);
@@ -76,6 +100,7 @@ export function stepPhysics(p: ParticlePool, interaction: InteractionSystem, now
           hx -= dy/Math.max(1,distance)*bend;
           hy += dx/Math.max(1,distance)*bend;
         }
+        if (effect === fx.bloom) alpha *= Math.min(1, .35 + e * .8 + .3 * Math.sin(Math.PI * progress) ** 4);
       }
       if (!o.reduced && p.owner[i] === 1) for (const hover of interaction.hoverWaves ?? []) {
         const age = now - hover.start;
@@ -90,8 +115,14 @@ export function stepPhysics(p: ParticlePool, interaction: InteractionSystem, now
         hy += ny * sparkle * (2.2 + random * 1.4);
         alpha = Math.min(1, alpha + sparkle * .24);
       }
-      alpha *= o.hold !== null && scene ? .09 + progress * .91 : .4 + progress * .6;
-      if (now < p.start[i] + p.delay[i]) alpha = .045;
+      if (o.reduced) {
+        const concealed = scene && o.hold !== null && progress < 1;
+        hx = concealed ? p.fx[i] : p.tx[i]; hy = concealed ? p.fy[i] : p.ty[i];
+        alpha = concealed ? 0 : p.opacity[i];
+      } else {
+        alpha *= o.hold !== null && scene ? progress : .4 + progress * .6;
+        if (now < p.start[i] + p.delay[i]) { alpha = 0; p.alpha[i] = 0; }
+      }
       p.z[i] += (p.tz[i] - p.z[i]) * depthResponse;
       p.state[i] = progress >= 1 ? o.floating ? Behavior.FLOAT : Behavior.LOCKED : effect === fx.magnet ? Behavior.MAGNETIC : Behavior.FORMING;
       if (scene && o.giftAt !== null && !o.reduced) {
@@ -110,7 +141,7 @@ export function stepPhysics(p: ParticlePool, interaction: InteractionSystem, now
     }
     const drift = !owned ? 1.4 : scene && o.floating ? 1.7 : o.style.preset === 'soft' ? .3 : 0;
     if (!o.reduced) { hx += Math.sin(clock + angle) * drift; hy += Math.cos(clock * .8 + angle) * drift; }
-    p.alpha[i] += (alpha - p.alpha[i]) * alphaResponse;
+    p.alpha[i] = o.reduced ? alpha : p.alpha[i] + (alpha - p.alpha[i]) * alphaResponse;
     // Carry the spring's displacement along the path. Only interaction/momentum settles;
     // the actual lettering arrives on time instead of lagging behind a moving target.
     const guideDX=owned ? hx-p.guideX[i] : 0, guideDY=owned ? hy-p.guideY[i] : 0;

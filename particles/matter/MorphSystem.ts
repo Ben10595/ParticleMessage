@@ -14,7 +14,7 @@ export class ParticlePool {
   guideX = new Float32Array(CAPACITY); guideY = new Float32Array(CAPACITY);
   driftVX = new Float32Array(CAPACITY); driftVY = new Float32Array(CAPACITY);
   flowX = new Float32Array(CAPACITY); flowY = new Float32Array(CAPACITY);
-  radius = new Float32Array(CAPACITY); alpha = new Float32Array(CAPACITY); opacity = new Float32Array(CAPACITY);
+  radius = new Float32Array(CAPACITY); baseRadius = new Float32Array(CAPACITY); alpha = new Float32Array(CAPACITY); opacity = new Float32Array(CAPACITY);
   start = new Float32Array(CAPACITY); duration = new Float32Array(CAPACITY); delay = new Float32Array(CAPACITY);
   phase = new Float32Array(CAPACITY); random = new Float32Array(CAPACITY);
   color = new Float32Array(CAPACITY * 3);
@@ -28,11 +28,11 @@ export class ParticlePool {
       this.random[i] = seed(i + 7); this.phase[i] = seed(i + 21) * Math.PI * 2;
       this.x[i] = seed(i + 8) * width; this.y[i] = seed(i + 82) * height;
       this.tx[i] = this.x[i]; this.ty[i] = this.y[i]; this.z[i] = seed(i + 91) * 100 - 50;
-      this.radius[i] = .45 + seed(i) * .8; this.alpha[i] = 0;
+      this.radius[i] = this.baseRadius[i] = .45 + seed(i) * .8; this.alpha[i] = 0;
       this.color.set(i % 7 === 0 ? COLORS.gold : i % 11 === 0 ? COLORS.violet : COLORS.ivory, i * 3);
     }
   }
-  form(group: number, input: Target[], now: number, duration: number, effect: TransitionEffect, preserve = false): number[] {
+  form(group: number, input: Target[], now: number, duration: number, effect: TransitionEffect, preserve = false, restartOpacity = true): number[] {
     const old = this.groups.get(group) ?? [];
     const available = old.slice();
     const budget = Math.min(input.length, this.count - (this.countOwned() - old.length));
@@ -59,11 +59,12 @@ export class ParticlePool {
       // Neighbouring dots share a flow field sized to the text, not the viewport.
       this.flowX[i] = (t.x-(left+right)/2)/width*spread*2;
       this.flowY[i] = (t.y-(top+bottom)/2)/height*spread;
-      this.radius[i] = t.radius ?? 1; this.opacity[i] = t.alpha ?? .92;
+      this.radius[i] = this.baseRadius[i] = t.radius ?? 1; this.opacity[i] = t.alpha ?? .92;
       this.color.set(t.color ?? COLORS.ivory, i * 3);
       this.glyph[i] = t.glyph ?? -1; this.part[i] = t.part ?? 0; this.uiElement[i] = t.uiElement ?? 0;
       this.start[i] = now; this.delay[i] = t.delay ?? 0; this.duration[i] = duration;
       this.effect[i] = effectId(effect);
+      if (restartOpacity && (effect === 'fade' || effect === 'typewriter' || effect === 'pixel' || effect === 'wordByWord' || effect === 'floatingWords' || effect === 'bloom' || effect === 'collect' || effect === 'scatter')) this.alpha[i] = 0;
     });
     this.groups.set(group, slots); return slots;
   }
