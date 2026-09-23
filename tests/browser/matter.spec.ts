@@ -43,7 +43,7 @@ test('particle controls persist in the saved message',async({page})=>{
 });
 test('homepage keeps the particle canvas dormant behind the responsive Message Core',async({page},info)=>{
  await page.goto('/');await page.getByLabel('Passwort',{exact:true}).fill('particle-test');await page.getByRole('button',{name:'Öffnen',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Was möchtest du sagen?'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Eine Nachricht. Dein Moment.'})).toBeVisible();
  await expect(page.locator('.message-core')).toBeVisible();
  await expect.poll(async()=>Number(await page.locator('canvas').getAttribute('data-ui-target-count'))).toBe(0);
  await page.waitForTimeout(2000);

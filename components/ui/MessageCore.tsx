@@ -41,6 +41,8 @@ export default function MessageCore({ activity = 0, label, mode }: MessageCorePr
       <div className="core-aura" aria-hidden="true" />
       <div className="core-orbit core-orbit-outer" aria-hidden="true"><i /><i /><i /></div>
       <div className="core-orbit core-orbit-inner" aria-hidden="true"><i /><i /></div>
+      <div className="engine-fragments" aria-hidden="true"><span>TO / YOU</span><span>✦</span><span>FEEL / 01</span><span>•••</span></div>
+      <div className="engine-struts" aria-hidden="true"><i /><i /><i /><i /></div>
       <svg className="core-object" viewBox="0 0 320 320" aria-hidden="true">
         <defs>
           <linearGradient id="core-stroke-a" x1="28" y1="30" x2="292" y2="290" gradientUnits="userSpaceOnUse">

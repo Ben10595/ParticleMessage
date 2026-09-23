@@ -65,6 +65,42 @@ test('font and animation choices preview, follow their section and survive the s
   await page.screenshot({ path: `test-results/styled-message-${testInfo.project.name}.png` });
   expect(errors).toEqual([]);
 });
+test('message mood, typography, background, sound and QR code persist', async ({ page }) => {
+  await unlock(page);
+  await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Ein Moment für dich.');
+  await page.getByRole('group', { name: 'Stimmung wählen' }).getByRole('button', { name: /Dream/ }).click();
+  await select(page, 'Schriftgröße dieses Abschnitts', 'Groß');
+  await select(page, 'Textausrichtung dieses Abschnitts', 'Links');
+  await select(page, 'Hintergrund der Nachricht', 'Nacht');
+  await page.getByRole('switch', { name: 'Sound Design' }).check();
+  await expect(page.getByLabel('Live-Vorschau')).toHaveAttribute('data-message-background', 'night');
+  let saved: MessageContent | undefined;
+  await page.route('**/rest/v1/messages*', route => {
+    saved = route.request().postDataJSON().content;
+    return route.fulfill({ status: 201, body: '' });
+  });
+  await page.getByRole('button', { name: 'Nachricht senden', exact: true }).click();
+  await expect(page.getByRole('img', { name: 'QR-Code zum Öffnen der Nachricht' })).toBeVisible();
+  expect(saved?.slides[0]).toMatchObject({ size: 'large', align: 'left', effect: 'bloom' });
+  expect(saved?.settings).toMatchObject({ mood: 'dream', background: 'night', sound: true });
+});
+test('automatic mood follows message text when enabled', async ({ page }) => {
+  await unlock(page);
+  const mood = page.getByRole('group', { name: 'Stimmung wählen' });
+  await page.getByRole('button', { name: /Stimmung automatisch zum Text wählen/ }).click();
+  await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Danke, dass es dich gibt ❤️');
+  await expect(mood.getByRole('button', { name: /Memory/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Live-Vorschau')).toHaveAttribute('data-mood', 'memory');
+});
+test('word animation preset updates the live particle preview', async ({ page }) => {
+  await unlock(page);
+  await page.getByRole('textbox', { name: 'ABSCHNITT 01' }).fill('Ein Wort nach dem anderen');
+  await page.locator('.animation-gallery summary').click();
+  await page.getByRole('button', { name: 'Word by Word', exact: true }).click();
+  await expect(page.locator('canvas')).toHaveAttribute('data-text-effect', 'wordByWord');
+  await page.getByRole('button', { name: 'Floating Words', exact: true }).click();
+  await expect(page.locator('canvas')).toHaveAttribute('data-text-effect', 'floatingWords');
+});
 test('password rejection, signed httpOnly session, reload, and shared canvas across scenes', async ({ page, context }) => {
   await page.goto('/');
   const canvas = await page.locator('canvas').elementHandle();
@@ -73,7 +109,7 @@ test('password rejection, signed httpOnly session, reload, and shared canvas acr
   await expect(page.getByRole('main').getByRole('alert')).toHaveText('Falsches Passwort.');
   await page.getByLabel('Passwort', { exact: true }).fill('particle-test');
   await page.getByRole('button', { name: 'Öffnen', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Was möchtest du sagen?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Eine Nachricht. Dein Moment.' })).toBeVisible();
   expect(await canvas?.evaluate(el => el === document.querySelector('canvas'))).toBe(true);
   const cookie = (await context.cookies()).find(c => c.name === 'particle_message_access');
   expect(cookie?.httpOnly).toBe(true); expect(cookie?.sameSite).toBe('Strict'); expect(cookie?.secure).toBe(true);
@@ -109,7 +145,7 @@ test('per-slide writing, emoji insertion at cursor, ordering, preview, save and 
   let saved: Record<string, unknown> | undefined;
   await page.route('**/rest/v1/messages*', async route => { saved = route.request().postDataJSON(); await route.fulfill({ status: 201, body: '' }); });
   await page.getByRole('button', { name: 'Nachricht senden', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Deine Nachricht ist unterwegs.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Bereit, etwas auszulösen.' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Link zu deiner Nachricht' })).toHaveValue(/\/m\/[A-Za-z0-9_-]{12}$/);
   expect(saved?.content).toMatchObject({ slides: [{ text: 'Du bist wunderbar. ✨' }, { effect: 'wave', writing: { enabled: true, speed: 115, questionPause: 1000 } }] });
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -202,7 +238,7 @@ test('limits, deletion, validation, and save errors retain the draft', async ({ 
   for (let i = 1; i < 15; i++) await page.getByRole('button', { name: 'Abschnitt löschen', exact: true }).click();
   await page.route('**/rest/v1/messages*', route => route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ code: '42501' }) }));
   await page.getByRole('button', { name: 'Nachricht senden', exact: true }).click();
-  await expect(page.getByRole('main').getByRole('alert')).toContainText('nicht gespeichert'); await expect(input).toHaveValue('A'.repeat(150));
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('Supabase verweigert das Speichern'); await expect(input).toHaveValue('A'.repeat(150));
 });
 
 test('an open public message stops at its absolute expiry', async ({ page }) => {

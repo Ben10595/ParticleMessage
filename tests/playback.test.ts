@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { characterDelay, graphemes, isMessageExpired, LINK_LIFETIME_MS, typingTimeline } from '../lib/playback';
+import { characterDelay, graphemes, isMessageExpired, LINK_LIFETIME_MS, typingTimeline, wordTimeline } from '../lib/playback';
 import { DEFAULT_SETTINGS, EFFECTS, validateMessage, WRITING_PRESETS } from '../types/message';
 
 test('typing respects sentence, comma, paragraph pauses and emoji clusters', () => {
@@ -16,6 +16,9 @@ test('typing respects sentence, comma, paragraph pauses and emoji clusters', () 
   assert.ok(times[2] - times[1] > 480);
   assert.ok(times[3] - times[2] > 860);
   assert.deepEqual(times, typingTimeline('A.\n❤️', writing), 'preview and viewer use reproducible timing');
+});
+test('word reveals group letters and separate words, including after line breaks', () => {
+  assert.deepEqual(wordTimeline('Hi du\n❤️!', 100), [0, 0, 0, 100, 100, 100, 200, 200]);
 });
 test('expiry is exactly 72 hours, independent of timezone and fails closed for invalid dates', () => {
   const created = '2026-09-06T12:00:00.000Z';

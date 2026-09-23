@@ -1,6 +1,14 @@
 import type { WritingSettings } from '../types/message';
 const segmenter = new Intl.Segmenter('de', { granularity: 'grapheme' });
 export function graphemes(text: string): string[] { return Array.from(segmenter.segment(text), item => item.segment); }
+export function wordTimeline(text: string, step = 160): number[] {
+  let word = -1, inside = false;
+  return graphemes(text).map(character => {
+    if (/\s/u.test(character)) inside = false;
+    else if (!inside) { word++; inside = true; }
+    return Math.max(0, word) * step;
+  });
+}
 export function characterDelay(character: string, settings: WritingSettings): number {
   if (character === '\n') return settings.speed + settings.paragraphPause;
   if (/[.…]/u.test(character)) return settings.speed + (settings.periodPause ?? settings.punctuationPause);

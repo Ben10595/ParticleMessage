@@ -60,22 +60,24 @@ export default function DesignSwitcher({ mode, preferences, draftCharacters = 0,
             className={`design-quick-button ${preferences.automatic ? 'is-on' : ''}`}
             type="button"
             aria-pressed={preferences.automatic}
+            aria-label="Auto"
             onClick={() => updatePreference('automatic', !preferences.automatic)}
-          ><span aria-hidden="true">↻</span> Auto</button>
+          ><span aria-hidden="true">↻</span><span className="quick-label">Auto</span></button>
           <button
             className={`design-quick-button ${preferences.favorite === mode ? 'is-on' : ''}`}
             type="button"
             aria-label={preferences.favorite === mode ? `${DESIGN_MODE_DETAILS[mode].label} ist dein Favorit` : `${DESIGN_MODE_DETAILS[preferences.favorite].label} als Favorit öffnen`}
             title={preferences.favorite === mode ? 'Aktuellen Modus als Favorit gespeichert' : `Favorit: ${DESIGN_MODE_DETAILS[preferences.favorite].label}`}
             onClick={() => preferences.favorite === mode ? onPreferencesChange({ ...preferences, favorite: mode }) : onModeChange(preferences.favorite)}
-          ><span aria-hidden="true">★</span> Favorit</button>
+          ><span aria-hidden="true">★</span><span className="quick-label">Favorit</span></button>
           <button
             className={`design-quick-button design-settings-button ${settingsOpen ? 'is-on' : ''}`}
             type="button"
             aria-expanded={settingsOpen}
             aria-controls="design-settings"
+            aria-label="Effekte"
             onClick={() => setSettingsOpen(open => !open)}
-          ><span aria-hidden="true">☷</span> Effekte</button>
+          ><span aria-hidden="true">☷</span><span className="quick-label">Effekte</span></button>
         </div>
       </div>
 

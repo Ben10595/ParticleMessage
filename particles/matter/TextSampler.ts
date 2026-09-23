@@ -37,7 +37,7 @@ export class TextSampler {
     const offsets = chars.map(char => { const at = offset; offset += char.length; return at; });
     rows.forEach((row, r) => {
       const rowWidth = row.reduce((n, i) => n + widths[i], 0);
-      let x = box.x + (align === 'left' ? 0 : (box.width - rowWidth) / 2);
+      let x = box.x + (align === 'left' ? 0 : align === 'right' ? box.width - rowWidth : (box.width - rowWidth) / 2);
       const y = box.y + (box.height - rows.length * size * 1.28) / 2 + r * size * 1.28;
       row.forEach(i => {
         result.glyphs.push({ index: i, start: offsets[i], end: offsets[i] + chars[i].length, x, y, width: widths[i], height: size * 1.28 });

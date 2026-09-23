@@ -18,6 +18,8 @@ import type { ParticleEngine } from '@/particles/matter/ParticleEngine';
 import { loadMessage, saveMessage, MessageExpiredError } from '@/lib/messages';
 import { DEFAULT_SETTINGS, slideSettings, validateMessage, type Slide, type MessageSettings } from '@/types/message';
 import { DEFAULT_DESIGN_PREFERENCES, nextDesignMode, normalizeDesignPreferences, type DesignMode, type DesignPreferences } from '@/lib/designModes';
+import { playSceneTone } from '@/lib/sceneSound';
+import ShareQr from '../ui/ShareQr';
 
 type View = 'password' | 'home' | 'editor' | 'loading' | 'playing' | 'ended' | 'success' | 'error';
 type SendPhase = 'idle' | 'charging' | 'dispatching' | 'sent';
@@ -45,6 +47,7 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
   const [retry, setRetry] = useState(0);
   const [link, setLink] = useState('');
   const [copyStatus, setCopyStatus] = useState('Link kopieren');
+  const [soundActive, setSoundActive] = useState(false);
   const [playbackText, setPlaybackText] = useState('');
   const [playbackIndex, setPlaybackIndex] = useState(0);
   const [playbackSlides, setPlaybackSlides] = useState<Slide[]>(initialSlides);
@@ -55,6 +58,7 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
   const sequence = useRef<AbortController | null>(null);
   const transitionLock = useRef(false);
   const saving = useRef(false);
+  const audio = useRef<AudioContext | null>(null);
   const autoMode = useRef(false);
   const onError = useCallback(() => setFallback(true), []);
   const wait = useCallback((ms: number, signal: AbortSignal) => engine ? engine.wait(ms, signal) : new Promise<void>((resolve, reject) => {
@@ -65,6 +69,18 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
   }), [engine]);
 
   useEffect(() => () => sequence.current?.abort(), []);
+  useEffect(() => () => { void audio.current?.close(); }, []);
+  useEffect(() => {
+    if (view === 'playing' && soundActive && settings.sound && audio.current) playSceneTone(audio.current, stage.phase, settings.mood);
+  }, [view, soundActive, settings.sound, settings.mood, stage.phase, stage.index]);
+  async function toggleSound() {
+    if (soundActive) { setSoundActive(false); return; }
+    try {
+      audio.current ??= new AudioContext();
+      await audio.current.resume();
+      setSoundActive(true);
+    } catch { setSoundActive(false); }
+  }
   useEffect(() => { autoMode.current = designPreferences.automatic; }, [designPreferences.automatic]);
   useEffect(() => { engine?.configure(settings); }, [engine, settings]);
   useEffect(() => { engine?.setMotionPreference(designPreferences.reducedMotion); }, [engine, designPreferences.reducedMotion]);
@@ -113,6 +129,7 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
         if (designPreferences.automatic && next !== view && ['home', 'editor', 'success'].includes(next)) {
           setDesignMode(current => nextDesignMode(current));
         }
+        if (next === 'home' || next === 'editor' || next === 'success') window.scrollTo(0, 0);
         setView(next);
         setTransitioning(false);
       }
@@ -283,6 +300,8 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
       data-reduced-motion={designPreferences.reducedMotion}
       data-focus-mode={designPreferences.focusMode}
       data-send-phase={sendPhase}
+      data-mood={settings.mood ?? 'calm'}
+      data-message-background={settings.background ?? 'night'}
       style={designStyle}
       className={`experience ${engine && !fallback ? 'canvas-ready' : ''} ${transitioning ? 'transitioning' : ''} ${!engine && !fallback ? 'canvas-pending' : ''}`}
       ref={surface}
@@ -305,11 +324,19 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
             <span>Particle <b>Message</b></span>
           </button>
           <div className="system-state" aria-hidden="true"><i /> {view === 'editor' ? 'Composer aktiv' : view === 'success' ? 'Übertragung komplett' : 'System bereit'}</div>
-          {view === 'editor' ? <button className="back" disabled={busy} onClick={() => void transition('home')}><span aria-hidden="true">←</span> Start</button> : <span className="edition">PRIVATE MESSAGE SYSTEM / 01</span>}
+          {view === 'editor' ? <button className="back" disabled={busy} onClick={() => void transition('home')}><span aria-hidden="true">←</span> Start</button> : <span className="edition">EIN MOMENT FÜR DICH</span>}
         </header>
       )}
 
-      {!slug && ['password', 'home', 'editor', 'success', 'error'].includes(view) && (
+      {showChrome && view !== 'password' && view !== 'error' && <nav className="system-nav" aria-label="Bereiche">
+        <button type="button" aria-current={view === 'editor' ? 'page' : undefined} title="Erstellen" onClick={() => view !== 'editor' && void transition('editor')}><span aria-hidden="true">✳</span><span>Erstellen</span></button>
+        <button type="button" title="Vorschau öffnen" onClick={() => view === 'editor' ? preview() : view === 'success' ? window.open(link, '_blank', 'noopener,noreferrer') : void transition('editor')}><span aria-hidden="true">◉</span><span>Vorschau öffnen</span></button>
+        <button type="button" title="Design" onClick={() => { if (view === 'editor') document.querySelector('.mood-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); else void transition('editor'); }}><span aria-hidden="true">◇</span><span>Design</span></button>
+        <button type="button" title="Effekte öffnen" onClick={() => { if (view === 'editor') { const details = document.querySelector<HTMLDetailsElement>('.matter-settings'); if (details) { details.open = true; details.scrollIntoView({ behavior: 'smooth', block: 'center' }); } } else void transition('editor'); }}><span aria-hidden="true">⌁</span><span>Effekte öffnen</span></button>
+        <button type="button" aria-current={view === 'success' ? 'page' : undefined} title="Teilen" onClick={() => { if (view === 'editor') document.querySelector('.editor-bottom')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); else if (view === 'home') void transition('editor'); }}><span aria-hidden="true">↗</span><span>Teilen</span></button>
+      </nav>}
+
+      {!slug && view === 'editor' && (
         <DesignSwitcher
           mode={designMode}
           preferences={designPreferences}
@@ -324,16 +351,16 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
       {view === 'home' && (
         <section className="landing home-landing">
           <div className="hero-copy">
-            <p className="eyebrow"><span className="signal-mark" aria-hidden="true" /> MESSAGE CORE / BEREIT</p>
-            <h1>Was möchtest<br />du sagen?</h1>
-            <p className="landing-description">Erstelle eine persönliche Nachricht und teile einen Moment, der sich nicht wie eine gewöhnliche Nachricht anfühlt.</p>
+            <p className="eyebrow"><span className="signal-mark" aria-hidden="true" /> PARTICLE MESSAGE PRÄSENTIERT</p>
+            <h1>Eine Nachricht.<br /><em>Dein Moment.</em></h1>
+            <p className="landing-description">Worte, die sich bewegen. Momente, die bleiben.</p>
             <div className="landing-actions">
               <button className="primary" aria-label="Nachricht erstellen" onClick={() => void transition('editor')}><span>Nachricht erstellen</span><i aria-hidden="true">↗</i></button>
               <button className="text-action" onClick={() => void play([{ text: 'Hey, du.', duration: 1700, effect: 'dust' }, { text: 'Schön, dass es dich gibt.', duration: 2500, effect: 'magnet', features: { hold: true, gift: 'ribbon' } }], { ...DEFAULT_SETTINGS, finale: true, finaleConfig: { shape: 'heart', ending: 'float', duration: 2500 } })}>Erlebnis ansehen <span aria-hidden="true">▶</span></button>
             </div>
-            <p className="privacy-note"><span aria-hidden="true">⌁</span> Persönlich erstellt · als Link geteilt · 3 Tage verfügbar</p>
+            <p className="privacy-note"><span aria-hidden="true">⌁</span> Für einen Menschen. Für einen Moment. Als Link geteilt.</p>
           </div>
-          <div className="core-callout" aria-hidden="true"><span>LIVE CORE</span><i /><p>REAGIERT AUF<br />DEINE EINGABE</p></div>
+          <div className="core-callout" aria-hidden="true"><span>WORTE WERDEN<br />WIRKLICHKEIT</span><i /><p>BERÜHRE DEN CORE</p></div>
         </section>
       )}
 
@@ -356,23 +383,24 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
         />
       )}
 
-      {view === 'playing' && <><ParticleViewer text={playbackText} font={slideSettings(playbackSlides[playbackIndex] ?? playbackSlides[0], settings).font} preview={!slug} onClose={() => void transition('editor')} current={playbackIndex} total={playbackSlides.length} /><SceneControls key={playbackIndex} engine={engine} player={player} stage={stage} slide={playbackSlides[playbackIndex] ?? playbackSlides[0]} /><DeviceTilt engine={engine} enabled={playbackSlides[playbackIndex]?.features?.tilt ?? settings.tilt ?? false} /></>}
+      {view === 'playing' && <><ParticleViewer text={playbackText} {...slideSettings(playbackSlides[playbackIndex] ?? playbackSlides[0], settings)} preview={!slug} onClose={() => void transition('editor')} current={playbackIndex} total={playbackSlides.length} />{settings.sound && <button className="sound-toggle" type="button" aria-pressed={soundActive} onClick={() => void toggleSound()}>{soundActive ? 'Ton aus' : 'Ton einschalten'}</button>}<SceneControls key={playbackIndex} engine={engine} player={player} stage={stage} slide={playbackSlides[playbackIndex] ?? playbackSlides[0]} /><DeviceTilt engine={engine} enabled={playbackSlides[playbackIndex]?.features?.tilt ?? settings.tilt ?? false} /></>}
 
       {view === 'ended' && <section className={`landing end ${settings.finale && (settings.finaleConfig?.ending ?? 'float') === 'float' ? 'floating-end' : ''}`}><button className="primary" onClick={() => void play(slides, settings)}>Nochmal ↺</button>{!slug && <button onClick={() => void transition('editor')}>← Zurück zum Editor</button>}</section>}
 
       {view === 'success' && (
         <section className="landing success">
           <div className="success-copy">
-            <p className="eyebrow"><span className="success-check" aria-hidden="true">✓</span> ÜBERTRAGUNG ABGESCHLOSSEN</p>
-            <h1>Deine Nachricht<br />ist unterwegs.</h1>
-            <p className="intro">Der Link ist bereit. Teile ihn mit deinem Menschen – er bleibt 3 Tage lang gültig.</p>
+            <p className="eyebrow"><span className="success-check" aria-hidden="true">✓</span> MESSAGE READY</p>
+            <h1>Bereit, etwas<br /><em>auszulösen.</em></h1>
+            <p className="intro">Dein Moment ist bereit. Der Link bleibt 3 Tage lang gültig.</p>
             <div className="share-link">
               <span className="link-label">DEIN PRIVATER LINK</span>
               <textarea ref={linkInput} readOnly value={link} aria-label="Link zu deiner Nachricht" onFocus={event => event.target.select()} />
               <button className="copy-icon" aria-label={copyStatus === 'Kopiert ✓' ? 'Link wurde kopiert' : 'Link über Symbol kopieren'} onClick={() => void copy()}>{copyStatus === 'Kopiert ✓' ? '✓' : '⧉'}</button>
             </div>
+            <ShareQr value={link} />
             <button className="primary copy" onClick={() => void copy()}>{copyStatus}</button>
-            <div className="success-actions"><button onClick={() => { setSendPhase('idle'); void transition('editor'); }}>← Weiter bearbeiten</button><a href={link}>Nachricht öffnen ↗</a></div>
+            <div className="success-actions"><button onClick={() => { setSendPhase('idle'); void transition('editor'); }}>← Weiter bearbeiten</button><a href={link}>Vorschau öffnen ↗</a></div>
             <span className="sr-only" aria-live="polite">{copyStatus}</span>
           </div>
         </section>

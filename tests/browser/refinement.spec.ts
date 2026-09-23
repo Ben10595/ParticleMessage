@@ -3,11 +3,11 @@ async function home(page: Page) {
   await page.goto('/');
   await page.getByLabel('Passwort', { exact: true }).fill('particle-test');
   await page.getByRole('button', { name: 'Öffnen', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Was möchtest du sagen?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Eine Nachricht. Dein Moment.' })).toBeVisible();
 }
 test('page text cannot be selected or copied, while editing and secret selections work', async ({ page }) => {
   await home(page);
-  const heading = page.getByRole('heading', { name: 'Was möchtest du sagen?' });
+  const heading = page.getByRole('heading', { name: 'Eine Nachricht. Dein Moment.' });
   expect(await heading.evaluate(el => getComputedStyle(el).userSelect)).toBe('none');
   const box = (await heading.boundingBox())!;
   await page.mouse.move(box.x + 3, box.y + box.height / 3); await page.mouse.down();

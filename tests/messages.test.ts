@@ -2,7 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_FONT, DEFAULT_SETTINGS, EFFECTS, FONTS, slideSettings, validateMessage } from '../types/message';
 import { generateSlug, insertWithRetry, SLUG_PATTERN } from '../lib/messages';
+import { applyMood, suggestMood } from '../lib/messageMoods';
 const valid = { version: 1 as const, slides: [{ text: ' Na du 👋 ', duration: 2200 }] };
+test('mood presets and per-moment typography survive the shared message format', () => {
+  const slides = [{ text: 'Du bist mir wichtig ❤️', duration: 2500, size: 'large' as const, align: 'left' as const }];
+  const draft = applyMood(suggestMood(slides[0].text), DEFAULT_SETTINGS, slides);
+  assert.equal(draft.settings.mood, 'memory');
+  assert.equal(draft.slides[0].size, 'large');
+  assert.equal(draft.slides[0].align, 'left');
+  assert.equal(draft.slides[0].effect, 'dust');
+  const saved = validateMessage({ version: 1, ...draft });
+  assert.equal(saved.settings?.mood, 'memory');
+  assert.equal(saved.settings?.background, 'aurora');
+  assert.equal(slideSettings(saved.slides[0], saved.settings).size, 'large');
+  assert.throws(() => validateMessage({ version: 1, slides: [{ ...slides[0], size: 'huge' }] }), /Schriftgröße/);
+  assert.throws(() => validateMessage({ version: 1, slides: [{ ...slides[0], align: 'justify' }] }), /Textausrichtung/);
+  assert.throws(() => validateMessage({ version: 1, slides, settings: { ...DEFAULT_SETTINGS, mood: 'unknown' } }), /Stimmung/);
+  assert.throws(() => validateMessage({ version: 1, slides, settings: { ...DEFAULT_SETTINGS, background: 'rainbow' } }), /Hintergrund/);
+  assert.throws(() => validateMessage({ version: 1, slides, settings: { ...DEFAULT_SETTINGS, sound: 'yes' } }), /Toneinstellung/);
+});
 test('fonts and animations survive validation and saving, with compatible legacy defaults', async () => {
   assert.equal(slideSettings(valid.slides[0]).font, DEFAULT_FONT);
   assert.equal(slideSettings(valid.slides[0], { ...DEFAULT_SETTINGS, font: 'mono' }).font, 'mono');

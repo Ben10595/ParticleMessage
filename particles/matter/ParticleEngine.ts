@@ -1,4 +1,4 @@
-import { graphemes, typingTimeline } from '../../lib/playback';
+import { graphemes, typingTimeline, wordTimeline } from '../../lib/playback';
 import { DEFAULT_FONT, DEFAULT_PARTICLE_STYLE, EFFECTS, type MessageSettings } from '../../types/message';
 import type { Finale, GiftStyle, Secret } from '../../types/experience';
 import { advanceHold } from '../reveal';
@@ -182,15 +182,18 @@ export class ParticleEngine {
     const rect = message.options.bounds?.();
     const box = rect ? { x: rect.x + 16, y: rect.y + 16, width: Math.max(20,rect.width - 32), height: Math.max(20,rect.height - 32) } : { x: this.width * .09, y: this.height * .17, width: this.width * .82, height: this.height * (message.options.reserveSpace ? .42 : .59) };
     const font = message.options.font ?? DEFAULT_FONT;
-    const layoutKey = [message.text,font,this.budget,box.width,box.height,message.options.reserveSpace].join('|');
+    const layoutKey = [message.text,font,message.options.size,message.options.align,this.budget,box.width,box.height,message.options.reserveSpace].join('|');
     if (refresh && layoutKey === this.messageLayoutKey) { this.syncPositions(); return; }
     this.messageLayoutKey = layoutKey; this.clip = rect ?? null;
     this.canvas.dataset.textRevision = String(Number(this.canvas.dataset.textRevision ?? 0) + 1);
-    const sample = this.sampler.sample(message.text,box,Math.min(rect ? 54 : 106,box.width / (rect ? 6 : 7)),font,'center',this.budget);
+    const sizeScale = message.options.size === 'small' ? .75 : message.options.size === 'large' ? 1.25 : 1;
+    const sample = this.sampler.sample(message.text,box,Math.min(rect ? 54 : 106,box.width / (rect ? 6 : 7)) * sizeScale,font,message.options.align ?? 'center',this.budget);
     const effect = message.options.effect ?? 'morph';
+    const words = effect === 'wordByWord' || effect === 'floatingWords' ? wordTimeline(message.text, effect === 'floatingWords' ? 185 : 155) : null;
     const targets = sample.targets.map(t => {
       let delay = message.options.writing?.enabled ? message.timeline[t.glyph ?? 0] ?? 0 : 0;
-      if (!message.options.writing?.enabled) {
+      if (words) delay = words[t.glyph ?? 0] ?? 0;
+      else if (!message.options.writing?.enabled) {
         if (['sweep','pixel','wave'].includes(effect)) delay = (t.x-box.x)/box.width*600 / this.style.speed;
         else if (effect === 'typewriter') delay = (t.glyph ?? 0) / Math.max(1,message.timeline.length) * 600 / this.style.speed;
         else delay = ((t.x - box.x) / box.width * .65 + (t.y - box.y) / box.height * .35) * 180 / this.style.speed;
@@ -199,7 +202,7 @@ export class ParticleEngine {
     });
     message.sample = sample;
     message.completion = this.reducedMotion ? 0 : Math.max(0,...targets.map(t=>t.delay)) + message.duration + 220;
-    this.pool.form(SCENE,targets,refresh ? message.start : this.time,message.duration,effect);
+    this.pool.form(SCENE,targets,refresh ? message.start : this.time,message.duration,effect === 'wordByWord' ? 'fade' : effect === 'floatingWords' ? 'rise' : effect);
     this.canvas.dataset.textFont = font; this.canvas.dataset.textEffect = effect;
     this.canvas.dataset.textFontSize = String(sample.fontSize); this.canvas.dataset.textLineCount = String(sample.lineCount);
     this.canvas.dataset.textTargetCount = String(targets.length);

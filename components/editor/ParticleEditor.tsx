@@ -1,6 +1,6 @@
 'use client';
 import { useRef, useState } from 'react';
-import { MAX_SLIDES, MAX_TEXT_LENGTH, EFFECTS, EFFECT_LABELS, EFFECT_DESCRIPTIONS, FONTS, FONT_LABELS, WRITING_PRESETS, slideSettings, type Slide, type MessageSettings, type TransitionEffect, type WritingSettings, type MessageFont } from '@/types/message';
+import { MAX_SLIDES, MAX_TEXT_LENGTH, EFFECTS, EFFECT_LABELS, EFFECT_DESCRIPTIONS, FONTS, FONT_LABELS, WRITING_PRESETS, slideSettings, type Slide, type MessageSettings, type TransitionEffect, type WritingSettings, type MessageFont, type TextSize, type TextAlign, type MessageBackground } from '@/types/message';
 import type { ParticleEngine } from '@/particles/matter/ParticleEngine';
 import SceneFeatureEditor from './SceneFeatureEditor';
 import ParticleStyleEditor from './ParticleStyleEditor';
@@ -9,8 +9,17 @@ import LivePreview from './LivePreview';
 import ParticleSelect from './ParticleSelect';
 import FontSample from '../ui/FontSample';
 import { useLinePresence } from '../hooks/useLinePresence';
+import { MOODS } from '@/types/message';
+import { MOOD_DETAILS, applyMood, suggestMood } from '@/lib/messageMoods';
 interface Props { onSettingsChange: (settings: MessageSettings) => void; previewActive: boolean; particlesEnabled: boolean; slides: Slide[]; settings: MessageSettings; engine: ParticleEngine | null; active: number; onSelect: (index: number) => void; onChange: (slides: Slide[]) => void; onActivity: () => void; onPreview: () => void; onSave: () => void; busy: boolean; error: string }
 const emojis = ['❤️', '😂', '✨', '👀', '🥳', '🔥', '😊', '😭', '💀', '🤍', '🫶', '🌙'];
+const animationPresets: { label: string; effect: TransitionEffect }[] = [
+  { label: 'Reveal', effect: 'fade' }, { label: 'Letters Assemble', effect: 'collect' },
+  { label: 'Signal Decode', effect: 'pixel' }, { label: 'Typewriter', effect: 'typewriter' },
+  { label: 'Wave', effect: 'wave' }, { label: 'Fragment', effect: 'scatter' },
+  { label: 'Glow Pulse', effect: 'bloom' }, { label: 'Word by Word', effect: 'wordByWord' },
+  { label: 'Floating Words', effect: 'floatingWords' },
+];
 const pauses = [
   { key: 'speed', label: 'Pro Zeichen', min: 20, max: 250, step: 5 },
   { key: 'commaPause', label: 'Komma ,', min: 0, max: 2500, step: 50 },
@@ -21,11 +30,12 @@ const pauses = [
 ] as const;
 export default function ParticleEditor({ previewActive, particlesEnabled, slides, settings, engine, active, onSelect, onChange, onActivity, onPreview, onSave, busy, error, onSettingsChange }: Props) {
   const slide = slides[active];
-  const { writing, effect, font } = slideSettings(slide, settings);
+  const { writing, effect, font, size, align } = slideSettings(slide, settings);
   const input = useRef<HTMLTextAreaElement>(null);
   const selection = useRef({ start: 0, end: 0 });
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [secretNotice, setSecretNotice] = useState('');
+  const [autoMood, setAutoMood] = useState(false);
   const emojiPresent = useLinePresence(emojiOpen);
   function update(patch: Partial<Slide>) {
     if (patch.text !== undefined && slide.features?.secrets?.length) {
@@ -33,7 +43,15 @@ export default function ParticleEditor({ previewActive, particlesEnabled, slides
       patch.features = { ...slide.features, secrets };
       if (secrets.length < slide.features.secrets.length) setSecretNotice('Eine bearbeitete Markierung wurde entfernt. Du kannst sie erneut markieren.');
     }
-    onChange(slides.map((item, index) => index === active ? { ...item, ...patch } : item)); }
+    const nextSlides = slides.map((item, index) => index === active ? { ...item, ...patch } : item);
+    if (autoMood && patch.text !== undefined) {
+      const suggested = suggestMood(nextSlides.map(item => item.text).join(' '));
+      if (suggested !== settings.mood) {
+        const next = applyMood(suggested, settings, nextSlides);
+        onSettingsChange(next.settings); onChange(next.slides); return;
+      }
+    }
+    onChange(nextSlides); }
   function write(patch: Partial<WritingSettings>) { update({ writing: { ...writing, ...patch } }); }
   function move(direction: number) {
     const target = active + direction;
@@ -59,9 +77,9 @@ export default function ParticleEditor({ previewActive, particlesEnabled, slides
   }
   const preset = Object.entries(WRITING_PRESETS).find(([, p]) => Object.entries(p).every(([key, value]) => writing[key as keyof WritingSettings] === value))?.[0] ?? 'Eigene Werte';
   return <section className="editor" aria-label="Nachrichteneditor" aria-busy={busy}>
-    <div className="editor-heading"><p className="eyebrow"><span className="signal-mark" aria-hidden="true" /> MESSAGE COMPOSER / {String(active + 1).padStart(2, '0')}</p><h1>Deine Worte.<br /><span>In Bewegung.</span></h1><p className="editor-description">Forme deine Nachricht Abschnitt für Abschnitt. Der Core reagiert auf jede Eingabe.</p></div>
+    <div className="editor-heading"><p className="eyebrow"><span className="signal-mark" aria-hidden="true" /> DER COMPOSER</p><h1>Gib deinen Worten<br /><span>eine Form.</span></h1><p className="editor-description">Schreib einen Moment. Schau zu, wie er lebendig wird.</p></div>
     <div className="editor-grid"><div className="editor-panel">
-      <div className="section-heading"><span>Nachrichtenfluss</span><span>{slides.length} / {MAX_SLIDES} ABSCHNITTE</span></div>
+      <div className="section-heading"><span>01 / Deine Nachricht</span><span>{slides.length} / {MAX_SLIDES} MOMENTE</span></div>
       <nav className="slide-tabs" aria-label="Abschnitte">
         {slides.map((_, index) => <button data-particle="button" key={index} aria-label={`Abschnitt ${index + 1}`} aria-current={index === active ? 'step' : undefined} onClick={() => { onSelect(index); setEmojiOpen(false); }} disabled={busy}>{String(index + 1).padStart(2, '0')}</button>)}
         <button data-particle="button" data-icon="plus" className="add-slide" aria-label="Abschnitt hinzufügen" disabled={slides.length >= MAX_SLIDES || busy} onClick={() => { onChange([...slides, { text: '', duration: 2500 }]); onSelect(slides.length); }}>+</button>
@@ -75,8 +93,11 @@ export default function ParticleEditor({ previewActive, particlesEnabled, slides
       <div className="particle-divider" />
       <div className="settings-group">
         <div className="control-row"><span data-particle="text">Schriftart</span><ParticleSelect label="Schriftart dieses Abschnitts" value={font} disabled={busy} onChange={value => update({ font: value as MessageFont })} options={FONTS.map(value => ({ value, label: FONT_LABELS[value], preview: <FontSample font={value} /> }))} /></div>
+        <div className="control-row"><span data-particle="text">Schriftgröße</span><ParticleSelect label="Schriftgröße dieses Abschnitts" value={size} disabled={busy} onChange={value => update({ size: value as TextSize })} options={[{ value: 'small', label: 'Klein' }, { value: 'medium', label: 'Mittel' }, { value: 'large', label: 'Groß' }]} /></div>
+        <div className="control-row"><span data-particle="text">Ausrichtung</span><ParticleSelect label="Textausrichtung dieses Abschnitts" value={align} disabled={busy} onChange={value => update({ align: value as TextAlign })} options={[{ value: 'left', label: 'Links' }, { value: 'center', label: 'Mittig' }, { value: 'right', label: 'Rechts' }]} /></div>
         <div className="control-row"><span data-particle="text">Animation</span><ParticleSelect label="Animation dieses Abschnitts" value={effect} disabled={busy} onChange={value => update({ effect: value as TransitionEffect })} options={EFFECTS.map(value => ({ value, label: EFFECT_LABELS[value] }))} /></div>
         <p className="effect-description">{EFFECT_DESCRIPTIONS[effect]}</p>
+        <details className="animation-gallery"><summary>Animationen entdecken <span>9 Ideen</span></summary><div className="animation-gallery-grid">{animationPresets.map(preset => <button key={preset.label} type="button" aria-pressed={effect === preset.effect} disabled={busy} onClick={() => update({ effect: preset.effect })}>{preset.label}</button>)}</div></details>
         <div className="control-row"><span data-particle="text">Fertigen Text halten</span><ParticleSelect label="Dauer des fertigen Textes" value={String(slide.duration)} disabled={busy} onChange={value => update({ duration: Number(value) })} options={Array.from({ length: 19 }, (_, i) => 1000 + i * 500).map(duration => ({ value: String(duration), label: `${(duration / 1000).toLocaleString('de-DE')} Sekunden` }))} /></div>
         <label className="control-row"><span data-particle="text">Schreibanimation</span><input data-particle="switch" className="switch" type="checkbox" role="switch" aria-label="Schreibanimation" checked={writing.enabled} disabled={busy} onChange={event => write({ enabled: event.target.checked })} /></label>
         {writing.enabled && <div className="control-row"><span data-particle="text">Schreibrhythmus</span><ParticleSelect label="Schreibrhythmus" disabled={busy} value={preset} onChange={value => { const p = WRITING_PRESETS[value as keyof typeof WRITING_PRESETS]; if (p) write(p); }} options={[{ value: 'Eigene Werte', label: 'Eigene Werte', disabled: true }, ...Object.keys(WRITING_PRESETS).map(value => ({ value, label: value }))]} /></div>}
@@ -85,11 +106,23 @@ export default function ParticleEditor({ previewActive, particlesEnabled, slides
         const value = writing[item.key] ?? (item.key === 'commaPause' ? writing.punctuationPause * .45 : writing.punctuationPause);
         return <label className="range-control" key={item.key}><span><span data-particle="text">{item.label}</span><output data-particle="text">{Math.round(value)} ms</output></span><input data-particle="range" aria-label={item.label} type="range" min={item.min} max={item.max} step={item.step} disabled={busy} value={value} onChange={event => write({ [item.key]: Number(event.target.value) })} /></label>;
       })}</div></details>}
-      <ParticleStyleEditor settings={settings} onChange={onSettingsChange} busy={busy} />
       <SceneFeatureEditor slide={slide} settings={settings} busy={busy} update={features => update({ features })} onSettingsChange={onSettingsChange} />
       {error && <p data-particle="text" role="alert" className="error-message">{error}</p>}
       <div className="editor-bottom"><button className="secondary" onClick={onPreview} disabled={busy}><span aria-hidden="true">▶</span> Vorschau</button><button className="primary" onClick={onSave} disabled={busy}>{busy ? 'Core lädt …' : 'Nachricht senden'} <span aria-hidden="true">↗</span></button></div>
-      <p className="expiry-note"><span aria-hidden="true">⌁</span> 3 Tage gültig · Ohne Passwort zu öffnen</p>
-    </div><LivePreview active={previewActive} particlesEnabled={particlesEnabled} engine={engine} slide={slide} settings={settings} onTest={onPreview} /></div>
+      <p className="expiry-note"><span aria-hidden="true">⌁</span> Der Link bleibt 3 Tage gültig.</p>
+    </div><LivePreview active={previewActive} particlesEnabled={particlesEnabled} engine={engine} slide={slide} settings={settings} onTest={onPreview} />
+    <aside className="mood-panel" aria-label="Stimmung und Darstellung">
+      <div className="section-heading"><span>03 / Atmosphäre</span><span>LIVE</span></div>
+      <p className="mood-intro">Wie soll sich deine Nachricht anfühlen?</p>
+      <div className="mood-list" role="group" aria-label="Stimmung wählen">
+        {MOODS.map(mood => <button key={mood} type="button" className="mood-choice" data-mood={mood} aria-pressed={settings.mood === mood} disabled={busy} onClick={() => { setAutoMood(false); const next = applyMood(mood, settings, slides); onSettingsChange(next.settings); onChange(next.slides); }}><span className="mood-symbol" aria-hidden="true" /><span><b>{MOOD_DETAILS[mood].label}</b><small>{MOOD_DETAILS[mood].description}</small></span><span aria-hidden="true">↗</span></button>)}
+      </div>
+      <button className="mood-auto" type="button" aria-pressed={autoMood} disabled={busy} onClick={() => { const enabled = !autoMood; setAutoMood(enabled); if (enabled) { const next = applyMood(suggestMood(slides.map(item => item.text).join(' ')), settings, slides); onSettingsChange(next.settings); onChange(next.slides); } }}>✦ Stimmung automatisch zum Text wählen {autoMood ? '✓' : ''}</button>
+      <div className="particle-divider" />
+      <div className="control-row"><span>Hintergrund</span><ParticleSelect label="Hintergrund der Nachricht" value={settings.background ?? 'night'} disabled={busy} onChange={value => onSettingsChange({ ...settings, background: value as MessageBackground })} options={[{ value: 'night', label: 'Nacht' }, { value: 'aurora', label: 'Aurora' }, { value: 'void', label: 'Stille' }]} /></div>
+      <label className="control-row"><span>Sound Design</span><input className="switch" role="switch" type="checkbox" aria-label="Sound Design" checked={settings.sound ?? false} disabled={busy} onChange={event => onSettingsChange({ ...settings, sound: event.target.checked })} /></label>
+      <p className="setting-note">Klang startet erst nach einer Berührung in der Vorschau oder beim Empfänger.</p>
+      <ParticleStyleEditor settings={settings} onChange={onSettingsChange} busy={busy} />
+    </aside></div>
   </section>;
 }
