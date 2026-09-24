@@ -1,4 +1,4 @@
-import type { TransitionEffect, WritingSettings } from '../types/message';
+import type { LivingTypeEngine, TransitionEffect, WritingSettings } from '../types/message';
 const segmenter = new Intl.Segmenter('de', { granularity: 'grapheme' });
 export function graphemes(text: string): string[] { return Array.from(segmenter.segment(text), item => item.segment); }
 export function wordTimeline(text: string, step = 160): number[] {
@@ -56,6 +56,12 @@ export function effectDuration(effect: TransitionEffect, speed = 1): number {
     : effect === 'collect' || effect === 'scatter' ? 1600
     : 1900;
   return base / speed;
+}
+/** Shared visual bridge between two sections; the stage can render each bridge differently. */
+export function livingTypeTransition(from: LivingTypeEngine, to: LivingTypeEngine): 'line' | 'contour' | 'dissolve' {
+  if (from === 'line' || to === 'line' || from === 'draw' || to === 'draw' || from === 'thread' || to === 'thread') return 'line';
+  if (from === 'echo' || to === 'echo' || from === 'void' || to === 'void') return 'contour';
+  return 'dissolve';
 }
 export const LINK_LIFETIME_MS = 3 * 24 * 60 * 60 * 1000;
 export function isMessageExpired(createdAt: unknown, now = Date.now()): boolean {

@@ -41,13 +41,14 @@ test('particle controls persist in the saved message',async({page})=>{
  await page.getByRole('button',{name:'Nachricht senden',exact:true}).click();await expect(page.getByLabel('Link zu deiner Nachricht')).toHaveValue(/\/m\/[A-Za-z0-9_-]{12}$/);
  expect(saved?.settings?.particles).toMatchObject({preset:'magnetic',density:'light',speed:1.5,wind:true});
 });
-test('homepage keeps the particle canvas dormant behind the responsive Message Core',async({page},info)=>{
+test('homepage presents living line type while the particle canvas stays dormant',async({page},info)=>{
  await page.goto('/');await page.getByLabel('Passwort',{exact:true}).fill('particle-test');await page.getByRole('button',{name:'Öffnen',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Eine Nachricht. Dein Moment.'})).toBeVisible();
- await expect(page.locator('.message-core')).toBeVisible();
- await expect.poll(async()=>Number(await page.locator('canvas').getAttribute('data-ui-target-count'))).toBe(0);
+ await expect(page.locator('[data-living-engine="line"]')).toHaveAttribute('data-living-ready','true');
+ await expect(page.getByRole('button',{name:'Nachricht erstellen',exact:true})).toBeVisible();
+ await expect.poll(async()=>Number(await page.locator('.particle-canvas').getAttribute('data-ui-target-count'))).toBe(0);
  await page.waitForTimeout(2000);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:`test-results/matter-home-${info.project.name}.png`});
- expect(await page.locator('canvas').count()).toBe(1);
+ expect(await page.locator('.particle-canvas').count()).toBe(1);
 });

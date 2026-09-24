@@ -1,6 +1,6 @@
 # ParticleMessage
 
-Eine deutschsprachige Nachrichten-Webanwendung mit Next.js App Router, TypeScript, einer eigenen modularen WebGL2-Partikelengine mit Canvas2D-Fallback und Supabase. Keine Konten, KI, Kamera, Mikrofon oder Partikelbibliothek.
+Eine deutschsprachige Nachrichten-Webanwendung mit Next.js App Router, TypeScript, zehn SVG-basierten Living-Type-Engines, einer eigenen WebGL2-Partikelengine mit Canvas2D-Fallback und Supabase. Keine Konten, KI, Kamera, Mikrofon oder Partikelbibliothek.
 
 ## Lokal starten
 
@@ -45,8 +45,8 @@ RLS muss aktiviert bleiben. Die vorhandenen Policies müssen der Rolle `anon` SE
 {
   "version": 1,
   "slides": [
-    { "text": "Na du", "duration": 2200 },
-    { "text": "Schön, dass es dich gibt.", "duration": 3000 }
+    { "text": "Na du", "duration": 2200, "engine": "line", "engineParams": { "lineWidth": 2.5 } },
+    { "text": "Schön, dass es dich gibt.", "duration": 3000, "engine": "echo", "engineParams": { "count": 4 } }
   ]
 }
 ```
@@ -63,11 +63,19 @@ Keine neuen Environment Variables, Service-Role-Keys, Vercel-Cron-Endpunkte oder
 
 Grundlage: [Supabase Cron](https://supabase.com/docs/guides/cron/quickstart) und [restriktive RLS-Policies](https://supabase.com/docs/guides/database/postgres/row-level-security).
 
-## Message Core und Nachrichtenwelt
+## Living Type und Nachrichtenwelt
+
+Neue Abschnitte starten mit LINE MORPH. Die Engine zeichnet aus einer einzelnen berechneten Mittellinie die Buchstaben und lässt die Linie in lesbare Schrift übergehen. Im Animation Lab sind pro Abschnitt LINE, PARTICLE, LIQUID, THREAD, SIGNAL, ORBIT, SHATTER, ECHO, DRAW und VOID auswählbar. Die Regler passen sich an die gewählte Engine an; Geschwindigkeit und Linien-, Partikel- oder Echo-Werte werden direkt in der Live-Bühne sichtbar.
+
+Die Engines liegen als SVG-Stage in `components/partikel/LivingTypeStage.tsx`; `particles/matter/livingTypeGeometry.ts` rastert die Schrift nur im Speicher, um Punkte und Mittellinie zu bestimmen. Abschnittswechsel verbinden die alte und neue Form mit Linien-, Kontur- oder Auflösebewegung. Kurze Wörter werden größer, lange Texte ruhiger; ❤️, ✨ und 😂 lösen zurückhaltende Zusatzimpulse aus. Die Stage berücksichtigt `prefers-reduced-motion` und zeigt bei fehlender Canvas-Unterstützung lesbaren Text. Alte Nachrichten ohne `engine` verwenden weiterhin die bisherige Partikelwiedergabe im gleichen JSON-Format `version: 1`.
+
+Geteilte Links beginnen mit einem kurzen dunklen Intro und zeigen während der Nachricht keine Navigation. Nach dem Ende erscheinen „Nochmal ansehen“, „Antworten“ und „Particle Message erstellen“. Dezente synthetische Töne bleiben standardmäßig aus und beginnen erst nach einer Berührung.
+
+Die fünf bestehenden Designwelten betreffen die Produktoberfläche; sie sind unabhängig von den zehn Rendering-Engines für die Nachricht.
 
 Die Produktoberfläche bietet fünf eigenständige Designwelten: Particle, Message Core, Liquid Flow, Console Flow und Minimal Focus. Ein sichtbarer Umschalter bewahrt Composer, Navigation, Live-Vorschau und Wiedergabe. Pro Modus lassen sich Bewegung, Glow und Übergänge abstimmen; Favorit, Auto-Wechsel, Startmodus, Hintergrundeffekte, Partikel und Fokusmodus werden lokal im Browser gespeichert. „Draft Resonance“ reagiert auf die Länge des Entwurfs. Systemeinstellungen und die manuelle Option für reduzierte Bewegung werden berücksichtigt.
 
-Der SVG-/CSS-Message-Core reagiert auf Zeigerbewegung, Eingabe und den echten Speicherstatus. Der Partikelrenderer bleibt für Live-Vorschau und Nachrichtenwiedergabe verfügbar. Bei ausgeschalteter Partikelvorschau bleibt der Entwurf als Text lesbar; öffentliche geteilte Nachrichten werden durch lokale Anzeigeeinstellungen nicht verändert.
+Der SVG-/CSS-Message-Core reagiert auf Zeigerbewegung, Eingabe und den echten Speicherstatus. Der bisherige Partikelrenderer bleibt für ältere Nachrichten und optionale Szenenfunktionen verfügbar. Bei ausgeschalteter Partikelvorschau bleibt der Entwurf als Text lesbar; öffentliche geteilte Nachrichten werden durch lokale Anzeigeeinstellungen nicht verändert.
 
 - Dunkle Anthrazit-/Schwarz-Oberfläche mit kühlem Blau, Cyan und dezentem Violett, ruhigem Linienraster und großzügigem Freiraum.
 - Der persistente Message Core wechselt zwischen Ruhe, Eingabe, Aufladen, Versand, Erfolg, Sperre und Fehler. Der API-Aufruf startet sofort; es gibt keine künstliche Versandwartezeit.
@@ -83,9 +91,9 @@ Der SVG-/CSS-Message-Core reagiert auf Zeigerbewegung, Eingabe und den echten Sp
 
 ## Editor und Szenen
 
-Bis zu 15 Abschnitte mit je 150 Zeichen. Hinzufügen, Löschen und Verschieben erfolgen mit zugänglichen Schaltflächen. Die Live-Vorschau zeigt Änderungen nach 260 ms Debouncing und bleibt anschließend stehen. Auf Desktop ist die rechte Bühne fest im Viewport verankert; auf kleinen Displays steht sie oberhalb des Formulars. Der Wiederholen-Button spielt den Reveal erneut. Scrollen verschiebt vorhandene Partikel samt Zielpositionen, ohne Sampling oder Neuzuordnung. „Vorschau“ spielt denselben `ScenePlayer` wie der öffentliche Link; Escape/× kehrt mit erhaltenem Entwurf zurück.
+Bis zu 15 Abschnitte mit je 150 Zeichen. Hinzufügen, Löschen und Verschieben erfolgen mit zugänglichen Schaltflächen. Die Living-Type-Bühne reagiert direkt auf Text, Engine und Regler; die ältere Partikelvorschau verwendet 260 ms Debouncing. Auf Desktop bleibt die Bühne beim Scrollen in ihrer Spalte, auf kleinen Displays steht sie nach dem Textbereich. Der Wiederholen-Button spielt den Reveal erneut. „Vorschau“ spielt denselben `ScenePlayer` wie der öffentliche Link; Escape/× kehrt mit erhaltenem Entwurf zurück.
 
-23 Reveal-Verfahren plus Zufallsauswahl: Formwechsel, Verstreut, Wirbel, Welle, Regen, Zusammenziehen, Einblenden, Aufsteigen, Aufblühen, Schreibmaschine, Explosion, Spirale, Magnet, Zoom, Von links nach rechts, Punkte einsammeln, Portal, Gravity Drop, Shockwave, Dust Assemble, Orbit Assemble, Random Chaos und Pixel Sweep. Jeder Abschnitt besitzt seinen eigenen Übergang, seine Schrift und optional Schreibrhythmus/Satzzeichenpausen. Die Lesedauer beginnt erst nach dem Formieren.
+Die bisherigen Partikel-Reveals samt Zufallsauswahl und Schreibanimation bleiben zusätzlich erreichbar: Formwechsel, Verstreut, Wirbel, Welle, Regen, Zusammenziehen, Einblenden, Aufsteigen, Aufblühen, Schreibmaschine, Explosion, Spirale, Magnet, Zoom, Von links nach rechts, Punkte einsammeln, Portal, Gravity Drop, Shockwave, Dust Assemble, Orbit Assemble, Random Chaos, Pixel Sweep, Word by Word und Floating Words. Jeder Abschnitt besitzt eigene Engine, Partikelanimation, Schrift und optional Schreibrhythmus/Satzzeichenpausen. Die Lesedauer beginnt erst nach dem Formieren.
 
 Unter „Bewegung & Atmosphäre“ stehen Dichte, Animationsgeschwindigkeit (0,5–2×), Feder/Soft Float/Magnetic/Explosive, Berührungsmodus und kombinierbare Bewegungs-/Wind-/Gravitationseffekte bereit. Diese Einstellungen werden mitgespeichert.
 
@@ -100,7 +108,7 @@ Die optionalen Interaktionen werden in der Reihenfolge **Rätsel → Geschenk �
 
 Seitenbeschriftungen lassen sich weder markieren noch über normale Kopierbefehle kopieren. Eingabefelder bleiben für Bearbeitung und Geheimwort-Markierungen auswählbar; der Link-kopieren-Button funktioniert weiterhin. Das ist eine Bedienungsregel, kein Schutz vor Auslesen der öffentlichen Inhalte.
 
-Die gesamte Produktoberfläche bleibt natives HTML und SVG für Lesbarkeit, Tastatur und Screenreader. Nur Vorschau, öffentliche Nachricht und Erlebnisformen verwenden den Partikel-Canvas. Rätsel/Geheimnisse sind Inszenierungen im öffentlichen JSON, keine Verschlüsselung.
+Die gesamte Produktoberfläche bleibt natives HTML und SVG für Lesbarkeit, Tastatur und Screenreader. Neue Living-Type-Nachrichten verwenden eine SVG-Stage, ältere Partikeltexte und Szenenformen den vorhandenen Canvas. Rätsel/Geheimnisse sind Inszenierungen im öffentlichen JSON, keine Verschlüsselung.
 
 ## Architektur und Speicherformat
 

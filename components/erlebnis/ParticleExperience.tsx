@@ -9,6 +9,8 @@ import { ScenePlayer, type PlaybackStage } from '@/lib/ScenePlayer';
 import DeviceTilt from './DeviceTilt';
 import SceneControls from './SceneControls';
 import ParticleViewer from './ParticleViewer';
+import LivingHome from './LivingHome';
+import LivingTypeStage from '../partikel/LivingTypeStage';
 import PasswordGate from './PasswordGate';
 import Branding from '../ui/Branding';
 import MessageCore, { type MessageCoreMode } from '../ui/MessageCore';
@@ -16,14 +18,15 @@ import DesignSwitcher from '../ui/DesignSwitcher';
 import { useContentSelection } from '../hooks/useContentSelection';
 import type { ParticleEngine } from '@/particles/matter/ParticleEngine';
 import { loadMessage, saveMessage, MessageExpiredError } from '@/lib/messages';
-import { DEFAULT_SETTINGS, slideSettings, validateMessage, type Slide, type MessageSettings } from '@/types/message';
+import { DEFAULT_LIVING_TYPE_ENGINE, DEFAULT_SETTINGS, slideSettings, validateMessage, type Slide, type MessageSettings } from '@/types/message';
+import { livingTypeTransition } from '@/lib/playback';
 import { DEFAULT_DESIGN_PREFERENCES, nextDesignMode, normalizeDesignPreferences, type DesignMode, type DesignPreferences } from '@/lib/designModes';
 import { playSceneTone } from '@/lib/sceneSound';
 import ShareQr from '../ui/ShareQr';
 
-type View = 'password' | 'home' | 'editor' | 'loading' | 'playing' | 'ended' | 'success' | 'error';
+type View = 'password' | 'home' | 'editor' | 'loading' | 'intro' | 'playing' | 'ended' | 'success' | 'error';
 type SendPhase = 'idle' | 'charging' | 'dispatching' | 'sent';
-const initialSlides: Slide[] = [{ text: '', duration: 2500 }];
+const initialSlides: Slide[] = [{ text: '', duration: 2500, engine: DEFAULT_LIVING_TYPE_ENGINE }];
 const designStorageKey = 'particle-message-design-v1';
 
 export default function ParticleExperience({ slug, authenticated = false }: { slug?: string; authenticated?: boolean }) {
@@ -60,6 +63,7 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
   const saving = useRef(false);
   const audio = useRef<AudioContext | null>(null);
   const autoMode = useRef(false);
+  const replyRequested = useRef(false);
   const onError = useCallback(() => setFallback(true), []);
   const wait = useCallback((ms: number, signal: AbortSignal) => engine ? engine.wait(ms, signal) : new Promise<void>((resolve, reject) => {
     if (signal.aborted) { reject(new DOMException('Aborted', 'AbortError')); return; }
@@ -69,10 +73,15 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
   }), [engine]);
 
   useEffect(() => () => sequence.current?.abort(), []);
+  useEffect(() => {
+    if (slug) return;
+    replyRequested.current = new URLSearchParams(window.location.search).has('reply');
+    if (authenticated && replyRequested.current) setView('editor');
+  }, [authenticated, slug]);
   useEffect(() => () => { void audio.current?.close(); }, []);
   useEffect(() => {
-    if (view === 'playing' && soundActive && settings.sound && audio.current) playSceneTone(audio.current, stage.phase, settings.mood);
-  }, [view, soundActive, settings.sound, settings.mood, stage.phase, stage.index]);
+    if (view === 'playing' && soundActive && settings.sound && audio.current) playSceneTone(audio.current, stage.phase, settings.mood, playbackSlides[stage.index]?.engine);
+  }, [view, soundActive, settings.sound, settings.mood, stage.phase, stage.index, playbackSlides]);
   async function toggleSound() {
     if (soundActive) { setSoundActive(false); return; }
     try {
@@ -84,7 +93,12 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
   useEffect(() => { autoMode.current = designPreferences.automatic; }, [designPreferences.automatic]);
   useEffect(() => { engine?.configure(settings); }, [engine, settings]);
   useEffect(() => { engine?.setMotionPreference(designPreferences.reducedMotion); }, [engine, designPreferences.reducedMotion]);
-  useEffect(() => { engine?.setParticlesEnabled(slug ? true : designPreferences.particles); }, [engine, slug, designPreferences.particles]);
+  useEffect(() => {
+    const livingEditor = view === 'editor' && slides[active]?.engine !== undefined;
+    const livingPlayback = view === 'playing' && playbackSlides[playbackIndex]?.engine !== undefined
+      && ['forming', 'reading', 'secret'].includes(stage.phase);
+    engine?.setParticlesEnabled((slug ? true : designPreferences.particles) && !livingEditor && !livingPlayback);
+  }, [engine, slug, designPreferences.particles, view, slides, active, playbackSlides, playbackIndex, stage.phase]);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,7 +151,7 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
     finally { transitionLock.current = false; }
   }, [designPreferences.automatic, designPreferences.reducedMotion, view, wait]);
 
-  const unlock = useCallback(() => { void transition('home'); }, [transition]);
+  const unlock = useCallback(() => { void transition(replyRequested.current ? 'editor' : 'home'); }, [transition]);
   const play = useCallback(async (items: Slide[], options: MessageSettings = DEFAULT_SETTINGS) => {
     sequence.current?.abort();
     const controller = new AbortController();
@@ -148,6 +162,12 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
     try {
       await wait(engine?.reducedMotion ? 0 : 280, controller.signal);
       setPlaybackSlides(items);
+      setStage({ phase: 'forming', index: 0, text: '' });
+      if (slug) {
+        setView('intro');
+        setTransitioning(false);
+        await wait(engine?.reducedMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 200 : 1250, controller.signal);
+      }
       setView('playing');
       setTransitioning(false);
       transitionLock.current = false;
@@ -271,6 +291,12 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
   }
 
   const showChrome = !slug && view !== 'playing' && view !== 'ended';
+  const activePlaybackSlide = playbackSlides[playbackIndex] ?? playbackSlides[0];
+  const livingVisible = view === 'playing' && activePlaybackSlide.engine !== undefined && ['forming', 'reading', 'secret'].includes(stage.phase);
+  const activeLivingEngine = view === 'editor' ? slides[active]?.engine : livingVisible ? activePlaybackSlide.engine : undefined;
+  const previousPlaybackSlide = playbackSlides[playbackIndex - 1];
+  const bridge = previousPlaybackSlide?.engine && activePlaybackSlide.engine
+    ? livingTypeTransition(previousPlaybackSlide.engine, activePlaybackSlide.engine) : undefined;
   const draftCharacters = slides.reduce((total, slide) => total + Array.from(slide.text).length, 0);
   const profile = designPreferences.profiles[designMode];
   const designStyle = {
@@ -294,6 +320,7 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
   return (
     <main
       data-scene={view}
+      data-active-engine={activeLivingEngine ?? 'legacy'}
       data-design-mode={designMode}
       data-background-effects={designPreferences.backgroundEffects}
       data-particles-enabled={slug ? true : designPreferences.particles}
@@ -307,10 +334,11 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
       ref={surface}
       aria-busy={transitioning || busy}
       onKeyDownCapture={event => { if (transitioning) event.preventDefault(); }}
+      onPointerDownCapture={() => { if (slug && view === 'playing' && settings.sound && !soundActive) void toggleSound(); }}
     >
       <div className={`ambient-field ambient-${designMode}`} aria-hidden="true"><i /><i /><i /><i /></div>
       <ParticleCanvas onReady={setEngine} onError={onError} />
-      {!slug && view !== 'playing' && view !== 'ended' && (
+      {!slug && view !== 'home' && view !== 'playing' && view !== 'ended' && (
         <div className="core-presence">
           <MessageCore activity={coreActivity} mode={coreMode} label={coreMode === 'sent' ? 'Nachricht erfolgreich gesendet' : coreMode === 'locked' ? 'Geschützter Message Core' : 'Aktiver Message Core'} />
         </div>
@@ -348,21 +376,15 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
 
       {view === 'password' && <PasswordGate onUnlock={unlock} />}
 
-      {view === 'home' && (
-        <section className="landing home-landing">
-          <div className="hero-copy">
-            <p className="eyebrow"><span className="signal-mark" aria-hidden="true" /> PARTICLE MESSAGE PRÄSENTIERT</p>
-            <h1>Eine Nachricht.<br /><em>Dein Moment.</em></h1>
-            <p className="landing-description">Worte, die sich bewegen. Momente, die bleiben.</p>
-            <div className="landing-actions">
-              <button className="primary" aria-label="Nachricht erstellen" onClick={() => void transition('editor')}><span>Nachricht erstellen</span><i aria-hidden="true">↗</i></button>
-              <button className="text-action" onClick={() => void play([{ text: 'Hey, du.', duration: 1700, effect: 'dust' }, { text: 'Schön, dass es dich gibt.', duration: 2500, effect: 'magnet', features: { hold: true, gift: 'ribbon' } }], { ...DEFAULT_SETTINGS, finale: true, finaleConfig: { shape: 'heart', ending: 'float', duration: 2500 } })}>Erlebnis ansehen <span aria-hidden="true">▶</span></button>
-            </div>
-            <p className="privacy-note"><span aria-hidden="true">⌁</span> Für einen Menschen. Für einen Moment. Als Link geteilt.</p>
-          </div>
-          <div className="core-callout" aria-hidden="true"><span>WORTE WERDEN<br />WIRKLICHKEIT</span><i /><p>BERÜHRE DEN CORE</p></div>
-        </section>
-      )}
+      {view === 'home' && <LivingHome
+        onCreate={() => void transition('editor')}
+        onPreview={() => void play([
+          { text: 'Hey, du.', duration: 1700, engine: 'line' },
+          { text: 'Schön, dass es dich gibt.', duration: 2500, engine: 'liquid', features: { hold: true, gift: 'ribbon' } },
+          { text: 'Und das bleibt.', duration: 2200, engine: 'echo' },
+        ], { ...DEFAULT_SETTINGS, finale: true, finaleConfig: { shape: 'heart', ending: 'float', duration: 2500 } })}
+        reducedMotion={designPreferences.reducedMotion}
+      />}
 
       {view === 'editor' && (
         <ParticleEditor
@@ -383,9 +405,27 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
         />
       )}
 
-      {view === 'playing' && <><ParticleViewer text={playbackText} {...slideSettings(playbackSlides[playbackIndex] ?? playbackSlides[0], settings)} preview={!slug} onClose={() => void transition('editor')} current={playbackIndex} total={playbackSlides.length} />{settings.sound && <button className="sound-toggle" type="button" aria-pressed={soundActive} onClick={() => void toggleSound()}>{soundActive ? 'Ton aus' : 'Ton einschalten'}</button>}<SceneControls key={playbackIndex} engine={engine} player={player} stage={stage} slide={playbackSlides[playbackIndex] ?? playbackSlides[0]} /><DeviceTilt engine={engine} enabled={playbackSlides[playbackIndex]?.features?.tilt ?? settings.tilt ?? false} /></>}
+      {view === 'intro' && <section className="message-intro" aria-label="Nachricht beginnt"><span className="message-intro-line" aria-hidden="true" /><p>PARTICLE MESSAGE</p><h1>EIN MOMENT FÜR DICH</h1></section>}
 
-      {view === 'ended' && <section className={`landing end ${settings.finale && (settings.finaleConfig?.ending ?? 'float') === 'float' ? 'floating-end' : ''}`}><button className="primary" onClick={() => void play(slides, settings)}>Nochmal ↺</button>{!slug && <button onClick={() => void transition('editor')}>← Zurück zum Editor</button>}</section>}
+      {view === 'playing' && <>
+        <ParticleViewer text={playbackText} {...slideSettings(activePlaybackSlide, settings)} preview={!slug} onClose={() => void transition('editor')} current={playbackIndex} total={playbackSlides.length} />
+        {livingVisible && <div className="message-living-stage" data-living-transition={bridge ?? 'none'}><LivingTypeStage
+          text={stage.phase === 'secret' ? stage.text : activePlaybackSlide.text}
+          engine={activePlaybackSlide.engine}
+          engineParams={slideSettings(activePlaybackSlide, settings).engineParams}
+          font={slideSettings(activePlaybackSlide, settings).font}
+          size={slideSettings(activePlaybackSlide, settings).size}
+          align={slideSettings(activePlaybackSlide, settings).align}
+          transition={bridge}
+          playing={stage.phase === 'forming' || stage.phase === 'reading' || stage.phase === 'secret'}
+          reducedMotion={designPreferences.reducedMotion}
+        /></div>}
+        {!slug && settings.sound && <button className="sound-toggle" type="button" aria-pressed={soundActive} onClick={() => void toggleSound()}>{soundActive ? 'Ton aus' : 'Ton einschalten'}</button>}
+        <SceneControls key={playbackIndex} engine={engine} player={player} stage={stage} slide={activePlaybackSlide} useFallbackSecrets={activePlaybackSlide.engine !== undefined} />
+        <DeviceTilt engine={engine} enabled={activePlaybackSlide.features?.tilt ?? settings.tilt ?? false} />
+      </>}
+
+      {view === 'ended' && <section className="message-end" aria-label="Nachricht beendet"><span className="message-end-rule" aria-hidden="true" /><p>DEIN MOMENT BLEIBT.</p><div className="message-end-actions"><button onClick={() => void play(slides, settings)}>Nochmal ansehen ↺</button><Link href="/?reply=1">Antworten ↗</Link><Link href="/">Particle Message erstellen ↗</Link></div></section>}
 
       {view === 'success' && (
         <section className="landing success">
@@ -408,7 +448,7 @@ export default function ParticleExperience({ slug, authenticated = false }: { sl
 
       {view === 'loading' && <section className="landing loading-screen"><p role="status"><span className="loading-line" aria-hidden="true" /> Nachricht wird geladen.</p></section>}
       {view === 'error' && <section className="landing error-screen"><p className="eyebrow">SYSTEMHINWEIS</p><h1 className="status-title">{error}</h1><p className="sr-only" role="alert">{error}</p>{retryable && <button className="primary" onClick={() => { setView('loading'); setRetry(value => value + 1); }}>Erneut versuchen</button>}<Link className="home-link" href="/">Eigene Nachricht schreiben ↗</Link></section>}
-      <Branding />
+      {!slug && view !== 'playing' && <Branding />}
     </main>
   );
 }

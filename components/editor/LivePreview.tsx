@@ -1,12 +1,17 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import type { ParticleEngine } from '@/particles/matter/ParticleEngine';
-import { FONT_LABELS, EFFECT_LABELS, slideSettings, type Slide, type MessageSettings } from '@/types/message';
+import { EFFECT_LABELS, LIVING_TYPE_LABELS, slideSettings, type Slide, type MessageSettings } from '@/types/message';
+import LivingTypeStage from '../partikel/LivingTypeStage';
+import { livingDuration } from '@/particles/matter/livingType';
 export default function LivePreview({ active, particlesEnabled, engine, slide, settings, onTest }: { onTest: () => void; active: boolean; particlesEnabled: boolean; engine: ParticleEngine | null; slide: Slide; settings: MessageSettings }) {
   const bounds = useRef<HTMLDivElement>(null);
   const [replay, setReplay] = useState(0);
   const { text } = slide;
-  const { effect, writing, font, size, align } = slideSettings(slide, settings);
+  const { effect, writing, font, size, align, engine: livingEngine, engineParams } = slideSettings(slide, settings);
+  const living = slide.engine !== undefined;
+  const previewText = text || 'Deine Worte.';
+  const duration = living ? livingDuration(previewText, livingEngine, engineParams) : slide.duration;
   useEffect(() => {
     if (!engine || !active || !particlesEnabled) return;
     const controller = new AbortController();
@@ -48,11 +53,14 @@ export default function LivePreview({ active, particlesEnabled, engine, slide, s
       canvas.style.clipPath = '';
     };
   }, []);
-  return <aside className="live-preview" aria-label="Live-Vorschau" data-particles-enabled={particlesEnabled} data-mood={settings.mood ?? 'calm'} data-message-background={settings.background ?? 'night'}>
+  return <aside className="live-preview" aria-label="Live-Vorschau" data-living-engine={living ? livingEngine : 'legacy'} data-particles-enabled={particlesEnabled} data-mood={settings.mood ?? 'calm'} data-message-background={settings.background ?? 'night'}>
     <div className="preview-meta"><span><i aria-hidden="true" /> 02 / LIVE VORSCHAU</span><button aria-label="Abschnitt erneut abspielen" onClick={() => setReplay(n => n + 1)}>↻</button></div>
     <div className="particle-divider" />
-    <div className="preview-bounds" ref={bounds}><p data-message-font={font} data-text-size={size} data-text-align={align} className={`live-fallback ${engine && particlesEnabled ? 'live-ghost' : ''}`}>{text || 'Deine Worte.'}</p></div>
-    <p className="preview-caption"><span className="preview-live-dot" aria-hidden="true" />Live · {FONT_LABELS[font]} · {EFFECT_LABELS[effect]}</p>
+    <div className="preview-bounds" ref={bounds}>
+      {living && <LivingTypeStage text={previewText} engine={livingEngine} engineParams={engineParams} font={font} size={size} align={align} playing={active} replayKey={replay} className="preview-living-stage" />}
+      <p data-message-font={font} data-text-size={size} data-text-align={align} className={`live-fallback ${living ? 'sr-only' : engine && particlesEnabled ? 'live-ghost' : ''}`}>{previewText}</p>
+    </div>
+    <p className="preview-caption"><span className="preview-live-dot" aria-hidden="true" /> LIVE <span aria-hidden="true">/</span> {living ? LIVING_TYPE_LABELS[livingEngine].toUpperCase() : EFFECT_LABELS[effect].toUpperCase()} <span aria-hidden="true">/</span> {(duration / 1000).toFixed(1)} SEC</p>
     {(slide.features?.hold || slide.features?.gift || slide.features?.puzzle || slide.features?.secrets?.length || settings.finale) && <div className="preview-extras"><p>{[slide.features?.puzzle && 'Rätsel', slide.features?.gift && 'Geschenk', slide.features?.hold && 'Gedrückt halten', slide.features?.secrets?.length && 'Geheime Worte', settings.finale && 'Finale'].filter(Boolean).join(' · ')}</p><button data-particle="button" onClick={onTest}>Gesamtes Erlebnis testen ↗</button><span>Hier siehst du Schrift und Reveal. Alle Extras erlebst du in der Gesamtvorschau.</span></div>}
   </aside>;
 }

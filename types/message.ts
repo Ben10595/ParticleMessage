@@ -7,6 +7,97 @@ export const TEXT_ALIGNS = ['left', 'center', 'right'] as const;
 export type TextAlign = typeof TEXT_ALIGNS[number];
 export const MESSAGE_BACKGROUNDS = ['night', 'aurora', 'void'] as const;
 export type MessageBackground = typeof MESSAGE_BACKGROUNDS[number];
+export const LIVING_TYPE_ENGINES = ['line', 'particle', 'liquid', 'thread', 'signal', 'orbit', 'shatter', 'echo', 'draw', 'void'] as const;
+export type LivingTypeEngine = typeof LIVING_TYPE_ENGINES[number];
+export const LIVING_TYPE_LABELS: Record<LivingTypeEngine, string> = {
+  line: 'Line Morph', particle: 'Particle', liquid: 'Liquid', thread: 'Thread', signal: 'Signal',
+  orbit: 'Orbit', shatter: 'Shatter', echo: 'Echo', draw: 'Draw', void: 'Void',
+};
+/** Numeric controls shared by the editor, renderer and persisted message JSON. */
+export interface LivingTypeParams {
+  speed: number;
+  intensity: number;
+  lineWidth: number;
+  glow: number;
+  curvature: number;
+  spring: number;
+  morphSpeed: number;
+  trail: number;
+  amount: number;
+  size: number;
+  magnetism: number;
+  scatter: number;
+  count: number;
+  distance: number;
+  delay: number;
+  blur: number;
+}
+export type LivingTypeParamKey = keyof LivingTypeParams;
+export const LIVING_TYPE_PARAM_META: Record<LivingTypeParamKey, { label: string; min: number; max: number; step: number; unit?: string }> = {
+  speed: { label: 'Geschwindigkeit', min: .5, max: 2, step: .1 },
+  intensity: { label: 'Intensität', min: 0, max: 1, step: .05 },
+  lineWidth: { label: 'Linienstärke', min: 1, max: 5, step: .1, unit: 'px' },
+  glow: { label: 'Glow', min: 0, max: 1, step: .05 },
+  curvature: { label: 'Kurvenstärke', min: 0, max: 1, step: .05 },
+  spring: { label: 'Nachschwingen', min: 0, max: 1, step: .05 },
+  morphSpeed: { label: 'Morph-Geschwindigkeit', min: .5, max: 2, step: .1 },
+  trail: { label: 'Trail-Länge', min: 0, max: 1, step: .05 },
+  amount: { label: 'Partikelmenge', min: .5, max: 1.5, step: .1 },
+  size: { label: 'Partikelgröße', min: .5, max: 1.8, step: .1 },
+  magnetism: { label: 'Magnetische Stärke', min: 0, max: 1, step: .05 },
+  scatter: { label: 'Streuung', min: 0, max: 1, step: .05 },
+  count: { label: 'Echo-Anzahl', min: 2, max: 6, step: 1 },
+  distance: { label: 'Echo-Abstand', min: 4, max: 32, step: 1, unit: 'px' },
+  delay: { label: 'Echo-Verzögerung', min: 40, max: 250, step: 10, unit: 'ms' },
+  blur: { label: 'Echo-Unschärfe', min: 0, max: 8, step: .5, unit: 'px' },
+};
+export const LIVING_TYPE_CONTROLS: Record<LivingTypeEngine, readonly LivingTypeParamKey[]> = {
+  line: ['speed', 'lineWidth', 'glow', 'curvature', 'spring', 'morphSpeed', 'trail'],
+  particle: ['speed', 'amount', 'size', 'magnetism', 'scatter'],
+  liquid: ['speed', 'intensity'], thread: ['speed', 'intensity'], signal: ['speed', 'intensity'],
+  orbit: ['speed', 'intensity'], shatter: ['speed', 'intensity'],
+  echo: ['speed', 'count', 'distance', 'delay', 'blur'],
+  draw: ['speed', 'intensity'], void: ['speed', 'intensity'],
+};
+const BASE_LIVING_TYPE_PARAMS: LivingTypeParams = {
+  speed: 1, intensity: .55, lineWidth: 2.2, glow: .45, curvature: .55, spring: .4,
+  morphSpeed: 1, trail: .5, amount: 1, size: 1, magnetism: .55, scatter: .45,
+  count: 4, distance: 16, delay: 100, blur: 2,
+};
+export const DEFAULT_LIVING_TYPE_PARAMS: Record<LivingTypeEngine, LivingTypeParams> = {
+  line: { ...BASE_LIVING_TYPE_PARAMS },
+  particle: { ...BASE_LIVING_TYPE_PARAMS },
+  liquid: { ...BASE_LIVING_TYPE_PARAMS, intensity: .7 },
+  thread: { ...BASE_LIVING_TYPE_PARAMS, intensity: .6 },
+  signal: { ...BASE_LIVING_TYPE_PARAMS, intensity: .55 },
+  orbit: { ...BASE_LIVING_TYPE_PARAMS, intensity: .65 },
+  shatter: { ...BASE_LIVING_TYPE_PARAMS, intensity: .55 },
+  echo: { ...BASE_LIVING_TYPE_PARAMS },
+  draw: { ...BASE_LIVING_TYPE_PARAMS, intensity: .45 },
+  void: { ...BASE_LIVING_TYPE_PARAMS, intensity: .6 },
+};
+export const DEFAULT_LIVING_TYPE_ENGINE: LivingTypeEngine = 'line';
+export const LEGACY_LIVING_TYPE_ENGINE: LivingTypeEngine = 'particle';
+export function resolveLivingTypeParams(engine: LivingTypeEngine, params: Partial<LivingTypeParams> = {}): LivingTypeParams {
+  return { ...DEFAULT_LIVING_TYPE_PARAMS[engine], ...params };
+}
+export function isLivingTypeEngine(value: unknown): value is LivingTypeEngine {
+  return LIVING_TYPE_ENGINES.includes(value as LivingTypeEngine);
+}
+function validateLivingTypeParams(engine: LivingTypeEngine, value: unknown): Partial<LivingTypeParams> {
+  if (!record(value)) throw new Error('Die Einstellungen der Animation Engine sind ungültig.');
+  const allowed = new Set<string>(LIVING_TYPE_CONTROLS[engine]);
+  const result: Partial<LivingTypeParams> = {};
+  for (const [key, setting] of Object.entries(value)) {
+    if (!allowed.has(key)) throw new Error('Dieser Regler passt nicht zur gewählten Animation Engine.');
+    const meta = LIVING_TYPE_PARAM_META[key as LivingTypeParamKey];
+    if (!numberIn(setting, meta.min, meta.max) || (key === 'count' && !Number.isInteger(setting))) {
+      throw new Error(`Der Wert für ${meta.label} ist ungültig.`);
+    }
+    Object.assign(result, { [key]: setting });
+  }
+  return result;
+}
 // Version 1 remains readable: new per-slide settings are optional.
 export const EFFECTS = ['morph', 'scatter', 'vortex', 'wave', 'rain', 'implode', 'fade', 'rise', 'bloom', 'typewriter', 'explosion', 'spiral', 'magnet', 'zoom', 'sweep', 'collect', 'portal', 'gravity', 'shockwave', 'dust', 'orbit', 'chaos', 'pixel', 'wordByWord', 'floatingWords', 'random'] as const;
 const LEGACY_EFFECTS = ['outward'] as const;
@@ -36,7 +127,7 @@ function validateParticleStyle(value: unknown): ParticleStyle {
   return { density: value.density as ParticleStyle['density'], speed: value.speed as number, preset: value.preset as ParticleStyle['preset'], interaction: value.interaction as ParticleStyle['interaction'], trails: value.trails as boolean, ripples: value.ripples as boolean, wind: value.wind as boolean, gravity: value.gravity as boolean };
 }
 export interface MessageSettings { particles?: ParticleStyle; effect: TransitionEffect; finale: boolean; writing: WritingSettings; font?: MessageFont; tilt?: boolean; finaleConfig?: Finale; mood?: MessageMood; background?: MessageBackground; sound?: boolean }
-export interface Slide { text: string; duration: number; effect?: TransitionEffect; writing?: WritingSettings; font?: MessageFont; size?: TextSize; align?: TextAlign; features?: SceneFeatures }
+export interface Slide { text: string; duration: number; effect?: TransitionEffect; writing?: WritingSettings; font?: MessageFont; size?: TextSize; align?: TextAlign; features?: SceneFeatures; engine?: LivingTypeEngine; engineParams?: Partial<LivingTypeParams> }
 export interface MessageContent { version: 1; slides: Slide[]; settings?: MessageSettings }
 export const WRITING_PRESETS = {
   Schnell: { speed: 35, punctuationPause: 180, paragraphPause: 350, commaPause: 80, periodPause: 180, questionPause: 250, exclamationPause: 180 },
@@ -46,7 +137,8 @@ export const WRITING_PRESETS = {
 };
 export const DEFAULT_SETTINGS: MessageSettings = { effect: 'morph', finale: false, writing: { enabled: false, ...WRITING_PRESETS.Normal } };
 export function slideSettings(slide: Slide, settings: MessageSettings = DEFAULT_SETTINGS) {
-  return { effect: slide.effect ?? settings.effect, writing: slide.writing ?? settings.writing, font: slide.font ?? settings.font ?? DEFAULT_FONT, size: slide.size ?? 'medium', align: slide.align ?? 'center' };
+  const engine = slide.engine ?? LEGACY_LIVING_TYPE_ENGINE;
+  return { effect: slide.effect ?? settings.effect, writing: slide.writing ?? settings.writing, font: slide.font ?? settings.font ?? DEFAULT_FONT, size: slide.size ?? 'medium', align: slide.align ?? 'center', engine, engineParams: resolveLivingTypeParams(engine, slide.engineParams) };
 }
 export const MAX_SLIDES = 15;
 export const MAX_TEXT_LENGTH = 150;
@@ -76,6 +168,8 @@ export function validateMessage(value: unknown): MessageContent {
     if (Array.from(slide.text).length > MAX_TEXT_LENGTH) throw new Error(`Abschnitt ${index + 1}: Maximal 150 Zeichen.`);
     if (!numberIn(slide.duration, MIN_DURATION, MAX_DURATION)) throw new Error(`Abschnitt ${index + 1}: Wähle 1 bis 10 Sekunden.`);
     if (slide.effect !== undefined && !isEffect(slide.effect)) throw new Error('Dieser Übergang ist ungültig.');
+    if (slide.engine !== undefined && !isLivingTypeEngine(slide.engine)) throw new Error('Diese Animation Engine ist ungültig.');
+    if (slide.engineParams !== undefined && slide.engine === undefined) throw new Error('Wähle zuerst eine Animation Engine.');
     if (slide.font !== undefined && !isFont(slide.font)) throw new Error('Diese Schriftart ist ungültig.');
     if (slide.size !== undefined && !TEXT_SIZES.includes(slide.size as TextSize)) throw new Error('Diese Schriftgröße ist ungültig.');
     if (slide.align !== undefined && !TEXT_ALIGNS.includes(slide.align as TextAlign)) throw new Error('Diese Textausrichtung ist ungültig.');
@@ -83,7 +177,7 @@ export function validateMessage(value: unknown): MessageContent {
     const features = slide.features === undefined ? undefined : validateFeatures(slide.features, slide.text);
     if (features?.secrets) features.secrets = features.secrets.map(secret => ({ ...secret, start: secret.start - leading, end: secret.end - leading }));
     if (features) validateFeatures(features, text);
-    return { text, ...(features ? { features } : {}), duration: Math.round(slide.duration), ...(slide.effect !== undefined ? { effect: slide.effect } : {}), ...(slide.font !== undefined ? { font: slide.font } : {}), ...(slide.size !== undefined ? { size: slide.size as TextSize } : {}), ...(slide.align !== undefined ? { align: slide.align as TextAlign } : {}), ...(slide.writing !== undefined ? { writing: validateWriting(slide.writing) } : {}) };
+    return { text, ...(features ? { features } : {}), duration: Math.round(slide.duration), ...(slide.effect !== undefined ? { effect: slide.effect } : {}), ...(slide.font !== undefined ? { font: slide.font } : {}), ...(slide.size !== undefined ? { size: slide.size as TextSize } : {}), ...(slide.align !== undefined ? { align: slide.align as TextAlign } : {}), ...(slide.writing !== undefined ? { writing: validateWriting(slide.writing) } : {}), ...(slide.engine !== undefined ? { engine: slide.engine as LivingTypeEngine } : {}), ...(slide.engineParams !== undefined ? { engineParams: validateLivingTypeParams(slide.engine as LivingTypeEngine, slide.engineParams) } : {}) };
   });
   if (value.settings === undefined) return { version: 1, slides };
   const s = value.settings;

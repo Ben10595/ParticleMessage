@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { characterDelay, effectDuration, effectTimeline, graphemes, isMessageExpired, LINK_LIFETIME_MS, typingTimeline, wordTimeline } from '../lib/playback';
-import { DEFAULT_SETTINGS, EFFECTS, validateMessage, WRITING_PRESETS } from '../types/message';
+import { characterDelay, effectDuration, effectTimeline, graphemes, isMessageExpired, LINK_LIFETIME_MS, livingTypeTransition, typingTimeline, wordTimeline } from '../lib/playback';
+import { DEFAULT_SETTINGS, EFFECTS, LIVING_TYPE_ENGINES, validateMessage, WRITING_PRESETS } from '../types/message';
 
 test('typing respects sentence, comma, paragraph pauses and emoji clusters', () => {
   const writing = { enabled: true, ...WRITING_PRESETS.Normal };
@@ -56,6 +56,16 @@ test('old messages stay compatible; all new effects and writing settings round-t
   }
   const old = { version: 1, slides: [{ text: 'Hallo', duration: 2000 }] };
   assert.deepEqual(validateMessage(old), old);
+});
+test('adjacent Living Type engines select a stable bridge animation', () => {
+  assert.equal(livingTypeTransition('line', 'particle'), 'line');
+  assert.equal(livingTypeTransition('liquid', 'draw'), 'line');
+  assert.equal(livingTypeTransition('echo', 'void'), 'contour');
+  assert.equal(livingTypeTransition('signal', 'echo'), 'contour');
+  assert.equal(livingTypeTransition('particle', 'shatter'), 'dissolve');
+  for (const from of LIVING_TYPE_ENGINES) for (const to of LIVING_TYPE_ENGINES) {
+    assert.ok(['line', 'contour', 'dissolve'].includes(livingTypeTransition(from, to)));
+  }
 });
 test('untrusted animation settings are bounded and strictly typed', () => {
   const valid = { version: 1, slides: [{ text: 'Hallo', duration: 2000 }], settings: DEFAULT_SETTINGS };

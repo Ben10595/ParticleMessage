@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, slideSettings, type MessageSettings, type Slide } fro
 import { DEFAULT_FINALE } from '../types/experience';
 import { advanceHold } from '../particles/reveal';
 import { MOTION_TIMING } from '../particles/matter/motion';
+import { LIVING_TRANSITION_MS, livingDuration } from '../particles/matter/livingType';
 export type StagePhase = 'puzzle' | 'gift' | 'opening' | 'hold' | 'forming' | 'reading' | 'secret' | 'finale';
 export interface PlaybackStage { phase: StagePhase; index: number; text: string; error?: string; secret?: number }
 type Wait = (ms: number, signal: AbortSignal) => Promise<void>;
@@ -84,6 +85,9 @@ export class ScenePlayer {
           await this.wait(this.engine?.reducedMotion ? 0 : 450, this.signal);
         }
         const formation = this.engine?.formText(slide.text, { ...options, hold: features?.hold, reserveSpace: !!features?.secrets?.length }) ?? 0;
+        const livingFormation = slide.engine && !(this.engine?.reducedMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+          ? livingDuration(slide.text, options.engine, options.engineParams) + (index > 0 && slides[index - 1].engine ? LIVING_TRANSITION_MS : 0)
+          : 0;
         if (features?.hold) {
           this.pressed = false; this.show('hold', 'Halte gedrückt, um deine Nachricht zu enthüllen.');
           let progress = 0;
@@ -92,7 +96,8 @@ export class ScenePlayer {
             if (!document.hidden) progress = this.engine ? this.engine.holdProgress : advanceHold(progress, this.pressed, 40);
           }
           this.setHeld(false);
-        } else { this.show('forming', slide.text); await this.wait(formation, this.signal); }
+          if (slide.engine) { this.show('forming', slide.text); await this.wait(livingFormation, this.signal); }
+        } else { this.show('forming', slide.text); await this.wait(Math.max(formation, livingFormation), this.signal); }
         await this.read(slide);
       }
       if (settings.finale) {

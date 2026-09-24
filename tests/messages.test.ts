@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_FONT, DEFAULT_SETTINGS, EFFECTS, FONTS, slideSettings, validateMessage } from '../types/message';
+import { DEFAULT_FONT, DEFAULT_LIVING_TYPE_PARAMS, DEFAULT_SETTINGS, EFFECTS, FONTS, LIVING_TYPE_CONTROLS, LIVING_TYPE_ENGINES, LIVING_TYPE_PARAM_META, resolveLivingTypeParams, slideSettings, validateMessage } from '../types/message';
 import { generateSlug, insertWithRetry, SLUG_PATTERN } from '../lib/messages';
 import { applyMood, suggestMood } from '../lib/messageMoods';
 const valid = { version: 1 as const, slides: [{ text: ' Na du 👋 ', duration: 2200 }] };
@@ -80,4 +80,48 @@ test('explains network, RLS and missing-table save failures without exposing bac
   await assert.rejects(insertWithRetry(valid, async () => ({ error: { message: 'TypeError: fetch failed' } })), /NEXT_PUBLIC_SUPABASE_URL/);
   await assert.rejects(insertWithRetry(valid, async () => ({ error: { code: '42501' } })), /INSERT-Richtlinie/);
   await assert.rejects(insertWithRetry(valid, async () => ({ error: { code: 'PGRST205' } })), /public\.messages/);
+});
+
+test('Living Type engines and per-section controls survive storage without changing old messages', async () => {
+  const legacy = validateMessage(valid);
+  assert.equal(slideSettings(legacy.slides[0]).engine, 'particle');
+  assert.deepEqual(slideSettings(legacy.slides[0]).engineParams, DEFAULT_LIVING_TYPE_PARAMS.particle);
+  assert.equal(legacy.slides[0].engine, undefined, 'old JSON is not rewritten to a new engine');
+  for (const engine of LIVING_TYPE_ENGINES) {
+    for (const control of LIVING_TYPE_CONTROLS[engine]) {
+      const meta = LIVING_TYPE_PARAM_META[control];
+      assert.ok(DEFAULT_LIVING_TYPE_PARAMS[engine][control] >= meta.min && DEFAULT_LIVING_TYPE_PARAMS[engine][control] <= meta.max);
+    }
+    const key = LIVING_TYPE_CONTROLS[engine].find(control => control !== 'speed')!;
+    const value = LIVING_TYPE_PARAM_META[key].min;
+    const content = {
+      version: 1 as const,
+      slides: [{ text: `Engine ${engine}`, duration: 2800, engine, engineParams: { speed: 1.2, [key]: value } }],
+    };
+    const saved = validateMessage(JSON.parse(JSON.stringify(content)));
+    assert.deepEqual(saved, content);
+    assert.equal(slideSettings(saved.slides[0]).engine, engine);
+    assert.equal(slideSettings(saved.slides[0]).engineParams[key], value);
+    assert.deepEqual(slideSettings(saved.slides[0]).engineParams, resolveLivingTypeParams(engine, saved.slides[0].engineParams));
+    await insertWithRetry(saved, async (_slug, stored) => {
+      assert.deepEqual(stored, content);
+      return { error: null };
+    });
+  }
+});
+
+test('Living Type rejects unknown engines, mismatched controls and unbounded values', () => {
+  const slide = { text: 'Hallo', duration: 2800, engine: 'line' as const, engineParams: { lineWidth: 2.5 } };
+  assert.deepEqual(validateMessage({ version: 1, slides: [slide] }).slides[0], slide);
+  assert.throws(() => validateMessage({ version: 1, slides: [{ ...slide, engine: 'unknown' }] }), /Animation Engine/);
+  assert.throws(() => validateMessage({ version: 1, slides: [{ ...slide, engine: undefined }] }), /Wähle zuerst/);
+  assert.throws(() => validateMessage({ version: 1, slides: [{ ...slide, engineParams: { amount: 1 } }] }), /Regler passt nicht/);
+  for (const value of [NaN, Infinity, -1, 6, '2', null]) {
+    assert.throws(() => validateMessage({ version: 1, slides: [{ ...slide, engineParams: { lineWidth: value } }] }));
+  }
+  assert.throws(() => validateMessage({ version: 1, slides: [{ ...slide, engine: 'echo', engineParams: { count: 2.5 } }] }), /Echo-Anzahl/);
+  assert.throws(() => validateMessage({ version: 1, slides: [{ ...slide, engineParams: [] }] }), /Einstellungen/);
+  const lineParams = slideSettings(slide).engineParams;
+  assert.equal(lineParams.lineWidth, 2.5);
+  assert.equal(lineParams.morphSpeed, 1);
 });
